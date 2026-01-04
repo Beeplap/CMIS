@@ -74,9 +74,9 @@ export default function Sidebar({
       icon: LayoutDashboard,
       mainNav: [
         { id: "dashboard", label: "Dashboard", icon: Home },
-        { id: "teachers", label: "Teachers", icon: UserCheck },
-        { id: "students", label: "Students", icon: School },
-        { id: "subjects", label: "Subjects", icon: BookOpen },
+        { id: "teachers", label: "Teacher Management", icon: UserCheck },
+        { id: "students", label: "Student Management", icon: School },
+        { id: "subjects", label: "Class & Subject Management", icon: BookOpen },
       ],
       hasStatistics: true,
       actions: [
