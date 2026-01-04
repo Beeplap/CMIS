@@ -379,29 +379,92 @@ export default function AdminPage() {
   );
 
   // 5. Attendance Component
+  const [attendanceRecords, setAttendanceRecords] = useState([]);
+  const [selectedAttendanceClass, setSelectedAttendanceClass] = useState("");
+  const [attendanceDate, setAttendanceDate] = useState(new Date().toISOString().split('T')[0]);
+
+  const fetchAttendance = async (classId, date) => {
+      if (!classId) return;
+      setLoading(true);
+      // Assuming attendance table has: class_id, date, status, student_id (FK), etc.
+      // Adjust structure based on actual table. Using a generic guess based on previous files.
+      const { data, error } = await supabase
+        .from("attendance")
+        .select(`
+            *,
+            students:student_id (full_name, roll)
+        `)
+        .eq("class_id", classId) // Adjust if column name is different
+        .eq("date", date);
+      
+      if (data) setAttendanceRecords(data);
+      if (error) {
+          // Fallback if class_id is not the column, maybe it's linked via subject?
+          // For now, assuming direct link or we just show a message.
+          console.error("Attendance fetch error", error);
+      }
+      setLoading(false);
+  };
+
   const renderAttendance = () => (
       <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
           <h2 className="text-2xl font-bold">Attendance Monitoring</h2>
           <div className="flex gap-4">
-              <select className="border p-2 rounded-md w-40">
-                  <option>Select Class</option>
+              <select 
+                className="border p-2 rounded-md w-40"
+                value={selectedAttendanceClass}
+                onChange={(e) => {
+                    setSelectedAttendanceClass(e.target.value);
+                    fetchAttendance(e.target.value, attendanceDate);
+                }}
+              >
+                  <option value="">Select Class</option>
                   {classes.map(c => <option key={c.id} value={c.id}>{c.course}</option>)}
               </select>
-              <input type="date" className="border p-2 rounded-md" />
-              <Button>Filter</Button>
+              <input 
+                type="date" 
+                className="border p-2 rounded-md"
+                value={attendanceDate}
+                onChange={(e) => {
+                    setAttendanceDate(e.target.value);
+                    if(selectedAttendanceClass) fetchAttendance(selectedAttendanceClass, e.target.value);
+                }}
+              />
+              <Button onClick={() => fetchAttendance(selectedAttendanceClass, attendanceDate)}>Refresh</Button>
           </div>
           <Card>
               <CardContent className="p-0">
                   <table className="w-full text-sm text-left">
                       <thead className="bg-gray-100 uppercase text-gray-600">
                           <tr>
+                             <th className="px-6 py-3">Roll</th>
                              <th className="px-6 py-3">Student</th>
                              <th className="px-6 py-3">Status</th>
-                             <th className="px-6 py-3">Remarks</th>
+                             <th className="px-6 py-3">Date</th>
                           </tr>
                       </thead>
                       <tbody>
-                          <tr><td colSpan="3" className="px-6 py-8 text-center text-gray-500">Select a class to view attendance records</td></tr>
+                          {attendanceRecords.length > 0 ? (
+                              attendanceRecords.map(record => (
+                                  <tr key={record.id} className="border-b">
+                                      <td className="px-6 py-4">{record.students?.roll}</td>
+                                      <td className="px-6 py-4">{record.students?.full_name}</td>
+                                      <td className="px-6 py-4">
+                                          <span className={`px-2 py-1 rounded text-xs ${
+                                              record.status === 'Present' ? 'bg-green-100 text-green-700' : 
+                                              record.status === 'Absent' ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700'
+                                          }`}>
+                                              {record.status}
+                                          </span>
+                                      </td>
+                                      <td className="px-6 py-4">{record.date}</td>
+                                  </tr>
+                              ))
+                          ) : (
+                             <tr><td colSpan="4" className="px-6 py-8 text-center text-gray-500">
+                                 {selectedAttendanceClass ? "No records found for this date." : "Select a class to view attendance records"}
+                             </td></tr>
+                          )}
                       </tbody>
                   </table>
               </CardContent>
