@@ -610,9 +610,9 @@ export default function AdminPage() {
         {currentView === "subjects" && renderClasses()} 
         {/* Note: Sidebar uses 'subjects' ID for Class & Subject Management */}
         {currentView === "attendance" && renderAttendance()}
-        {currentView === "fees" && renderFees()} // Sidebar needs to support this ID
-        {currentView === "reports" && renderReports()} // Sidebar needs to support this ID
-        {currentView === "notices" && renderNotices()} // Sidebar needs to support this ID
+        {currentView === "fees" && renderFees()}
+        {currentView === "reports" && renderReports()}
+        {currentView === "notices" && renderNotices()}
       </main>
 
       {/* Modals */}
