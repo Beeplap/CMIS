@@ -616,22 +616,13 @@ export default function AdminPage() {
       </main>
 
       {/* Modals */}
-      {showAddUser && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-          <div className="w-full max-w-2xl bg-white rounded-lg shadow-xl overflow-hidden max-h-[90vh] overflow-y-auto">
-            <div className="flex justify-between items-center p-4 border-b">
-                <h3 className="text-lg font-semibold">Add {addUserRole === 'teacher' ? 'Teacher' : 'Student'}</h3>
-                <Button variant="ghost" onClick={() => setShowAddUser(false)}><XCircle className="w-5 h-5"/></Button>
-            </div>
-            <div className="p-4">
-                <AddUser 
-                    onClose={() => {setShowAddUser(false); fetchAllData();}} 
-                    defaultRole={addUserRole} 
-                />
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Modals */}
+      <AddUser 
+        open={showAddUser} 
+        onClose={() => setShowAddUser(false)} 
+        onUserAdded={fetchAllData}
+        defaultRole={addUserRole} 
+      />
 
       {showAddClass && (
            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
