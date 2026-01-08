@@ -110,9 +110,11 @@ export default function Sidebar({
       subtitle: "Dashboard",
       icon: User,
       mainNav: [
-        { id: "dashboard", label: "Overview", icon: LayoutDashboard },
+        { id: "dashboard", label: "Dashboard", icon: Home },
+        { id: "attendance", label: "Attendance", icon: Calendar },
+        { id: "marks", label: "Marks & Results", icon: BarChart3 },
         { id: "assignments", label: "Assignments", icon: BookOpen },
-        { id: "attendance", label: "My Attendance", icon: Calendar },
+        { id: "notices", label: "Notices", icon: Bell },
         { id: "profile", label: "Profile", icon: User },
       ],
       hasStatistics: false,
