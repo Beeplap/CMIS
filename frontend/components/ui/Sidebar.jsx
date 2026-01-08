@@ -95,19 +95,15 @@ export default function Sidebar({
       icon: BookOpen,
       mainNav: [
         { id: "dashboard", label: "Dashboard", icon: Home },
-        { id: "assignments", label: "Assignments", icon: BookOpen },
         { id: "attendance", label: "Attendance", icon: Calendar },
-        { id: "students", label: "Students", icon: Users },
+        { id: "marks", label: "Marks & Evaluation", icon: GraduationCap },
+        { id: "assignments", label: "Assignments", icon: BookOpen },
+        { id: "performance", label: "Performance", icon: BarChart3 },
+        { id: "notices", label: "Notices", icon: Bell },
+        { id: "profile", label: "Profile & Settings", icon: User },
       ],
       hasStatistics: false,
-      actions: [
-        {
-          id: "change-password",
-          label: "Change Password",
-          icon: Lock,
-          onClick: onChangePassword,
-        },
-      ],
+      actions: [],
     },
     student: {
       title: "Student",
