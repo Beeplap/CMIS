@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, Fragment } from "react";
+import React, { useState, Fragment, useEffect } from "react";
 import { Dialog, Transition } from "@headlessui/react";
 import { Button } from "./button";
 import {
@@ -12,15 +12,50 @@ import {
 
 export default function AddClass({ open, onClose, profiles = [], onCreated }) {
   const [newClass, setNewClass] = useState({
-    course: "",
+    course: "", // stores course code/name
     semester: "",
     subject: "",
     room_number: "",
     teacher_id: "",
   });
+  
+  // Data for cascading dropdowns
+  const [courses, setCourses] = useState([]);
+  const [availableSubjects, setAvailableSubjects] = useState([]);
+  
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+
+  // Fetch courses on mount
+  useEffect(() => {
+    if(open) {
+        fetch('/api/courses')
+            .then(res => res.json())
+            .then(data => setCourses(data.courses || []))
+            .catch(console.error);
+    }
+  }, [open]);
+
+  // Fetch subjects when Course or Semester changes
+  useEffect(() => {
+      if(newClass.course && newClass.semester) {
+          // Find course ID from selected course code/name
+          const selectedCourse = courses.find(c => c.code === newClass.course || c.name === newClass.course); 
+          // Note: Backend 'classes' might expect simple string for course.
+          // If we want to be precise we should store IDs, but existing data uses Strings likely.
+          // Let's rely on the Course Code (e.g. BCA) as the stored value.
+          
+          if(selectedCourse) {
+             fetch(`/api/subjects?course_id=${selectedCourse.id}&semester=${newClass.semester}`)
+                .then(res => res.json())
+                .then(data => setAvailableSubjects(data.subjects || []))
+                .catch(console.error);
+          }
+      } else {
+          setAvailableSubjects([]);
+      }
+  }, [newClass.course, newClass.semester, courses]);
 
   const handleSubmit = async () => {
     setError("");
@@ -52,6 +87,17 @@ export default function AddClass({ open, onClose, profiles = [], onCreated }) {
     }
   };
 
+  const getSemesterOptions = () => {
+      const c = courses.find(course => course.code === newClass.course);
+      if(!c) return [];
+      return Array.from({ length: c.duration }, (_, i) => i + 1);
+  };
+  
+  const isYearly = () => {
+      const c = courses.find(course => course.code === newClass.course);
+      return c?.type === 'Yearly';
+  };
+
   return (
     <Transition appear show={open} as={Fragment}>
       <Dialog as="div" className="relative z-50" onClose={onClose}>
@@ -77,41 +123,49 @@ export default function AddClass({ open, onClose, profiles = [], onCreated }) {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="space-y-1">
                     <label className="text-sm">Course</label>
-                    <input
-                      type="text"
-                      value={newClass.course}
-                      onChange={(e) =>
-                        setNewClass({ ...newClass, course: e.target.value })
-                      }
-                      className="w-full border rounded-md px-3 h-10 bg-white/80 dark:bg-black/20"
-                      placeholder="BSc Computer Science"
-                    />
+                    <select
+                        value={newClass.course}
+                        onChange={(e) => setNewClass({ ...newClass, course: e.target.value, semester: "", subject: "" })}
+                        className="w-full border rounded-md px-3 h-10 bg-white/80 dark:bg-black/20"
+                    >
+                        <option value="">Select Course</option>
+                        {courses.map(c => (
+                            <option key={c.id} value={c.code}>{c.name} ({c.code})</option>
+                        ))}
+                    </select>
                   </div>
 
                   <div className="space-y-1">
-                    <label className="text-sm">Semester</label>
-                    <input
-                      type="text"
-                      value={newClass.semester}
-                      onChange={(e) =>
-                        setNewClass({ ...newClass, semester: e.target.value })
-                      }
-                      className="w-full border rounded-md px-3 h-10 bg-white/80 dark:bg-black/20"
-                      placeholder="Semester 2"
-                    />
+                    <label className="text-sm">{isYearly() ? 'Year' : 'Semester'}</label>
+                     <select
+                        value={newClass.semester}
+                        onChange={(e) => setNewClass({ ...newClass, semester: e.target.value, subject: "" })}
+                        className="w-full border rounded-md px-3 h-10 bg-white/80 dark:bg-black/20"
+                        disabled={!newClass.course}
+                    >
+                        <option value="">Select {isYearly() ? 'Year' : 'Semester'}</option>
+                        {getSemesterOptions().map(sem => (
+                            <option key={sem} value={sem}>{sem}</option>
+                        ))}
+                    </select>
                   </div>
 
                   <div className="space-y-1">
                     <label className="text-sm">Subject</label>
-                    <input
-                      type="text"
-                      value={newClass.subject}
-                      onChange={(e) =>
-                        setNewClass({ ...newClass, subject: e.target.value })
-                      }
-                      className="w-full border rounded-md px-3 h-10 bg-white/80 dark:bg-black/20"
-                      placeholder="Data Structures"
-                    />
+                     <select
+                        value={newClass.subject}
+                        onChange={(e) => setNewClass({ ...newClass, subject: e.target.value })}
+                        className="w-full border rounded-md px-3 h-10 bg-white/80 dark:bg-black/20"
+                        disabled={!newClass.semester}
+                    >
+                        <option value="">Select Subject</option>
+                        {availableSubjects.map(sub => (
+                            <option key={sub.id} value={sub.name}>{sub.name} ({sub.code})</option>
+                        ))}
+                         {availableSubjects.length === 0 && newClass.semester && (
+                             <option disabled>No subjects found for this Sem</option>
+                         )}
+                    </select>
                   </div>
 
                   <div className="space-y-1">
@@ -165,6 +219,7 @@ export default function AddClass({ open, onClose, profiles = [], onCreated }) {
                   disabled={
                     loading ||
                     !newClass.course ||
+                    !newClass.semester ||
                     !newClass.subject ||
                     !newClass.teacher_id
                   }

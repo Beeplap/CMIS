@@ -29,7 +29,7 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import AddUser from "@/components/ui/addUser"; // Existing component
 import AddClass from "@/components/ui/addClass"; // Existing component
-// import AddSubject from "@/components/ui/addSubject"; // Assuming this exists or we'll make a simple one inline
+import ManageCurriculum from "@/components/ui/ManageCurriculum";
 
 export default function AdminPage() {
   const router = useRouter();
@@ -339,41 +339,55 @@ export default function AdminPage() {
 
   // 4. Class & Subjects Component
   const renderClasses = () => (
-    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-        <h2 className="text-2xl font-bold">Class & Subject Management</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+        <div className="flex flex-col gap-6">
+            {/* Active Class Assignments */}
             <Card>
                 <CardHeader className="flex flex-row items-center justify-between">
-                    <CardTitle>Classes</CardTitle>
-                    <Button size="sm" onClick={() => setShowAddClass(true)}><Plus className="w-4 h-4 mr-2"/> Add</Button>
+                    <div>
+                        <CardTitle>Active Class Assignments</CardTitle>
+                        <p className="text-sm text-gray-500 mt-1">Manage currently running classes and teacher assignments</p>
+                    </div>
+                    <Button onClick={() => setShowAddClass(true)} className="bg-purple-600"><Plus className="w-4 h-4 mr-2"/> Assign Class</Button>
                 </CardHeader>
-                <CardContent className="space-y-2">
-                    {classes.map(c => (
-                        <div key={c.id} className="flex justify-between p-3 bg-gray-50 rounded">
-                            <div>
-                                <p className="font-semibold">{c.course} {c.course === 'BCA' ? 'Sem' : 'Year'}-{c.semester} {c.section && `(${c.section})`}</p>
-                                <p className="text-xs text-gray-500">{c.subject}</p>
-                            </div>
+                <CardContent>
+                    {classes.length === 0 ? (
+                         <div className="text-center py-8 bg-gray-50 rounded-lg">
+                            <p className="text-gray-500">No active classes assigned yet.</p>
+                            <Button variant="link" onClick={() => setShowAddClass(true)}>Assign one now</Button>
+                         </div>
+                    ) : (
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                            {classes.map(c => (
+                                <div key={c.id} className="p-4 bg-white border rounded-lg shadow-sm hover:shadow-md transition-shadow relative group">
+                                    <h4 className="font-bold text-lg text-gray-800">{c.course}</h4>
+                                    <div className="flex gap-2 mb-2">
+                                         <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs font-medium">
+                                            {c.semester <= 8 ? 'Sem ' + c.semester : 'Year ' + c.semester}
+                                         </span>
+                                         {c.section && <span className="px-2 py-0.5 bg-gray-100 text-gray-700 rounded text-xs">{c.section}</span>}
+                                    </div>
+                                    <p className="text-sm font-medium text-gray-900 mb-1">{c.subject}</p>
+                                    <p className="text-xs text-gray-500 flex items-center gap-1">
+                                        <UserCheck className="w-3 h-3"/> {c.teacher ? c.teacher.full_name : 'No Teacher'}
+                                    </p>
+                                    <Button variant="ghost" size="sm" className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 text-red-500" onClick={async () => {
+                                        if(confirm("Remove this class assignment?")) {
+                                            await fetch(`/api/classes?id=${c.id}`, { method: 'DELETE' });
+                                            fetchAllData();
+                                        }
+                                    }}>
+                                        <Trash2 className="w-4 h-4"/>
+                                    </Button>
+                                </div>
+                            ))}
                         </div>
-                    ))}
-                    {classes.length === 0 && <p className="text-center text-gray-500 py-4">No classes added</p>}
+                    )}
                 </CardContent>
             </Card>
-            <Card>
-                <CardHeader className="flex flex-row items-center justify-between">
-                    <CardTitle>Subjects</CardTitle>
-                    <Button size="sm"><Plus className="w-4 h-4 mr-2"/> Add</Button>
-                </CardHeader>
-                 <CardContent className="space-y-2">
-                    {subjects.map(s => (
-                        <div key={s.id} className="flex justify-between p-3 bg-gray-50 rounded">
-                            <span className="font-medium">{s.name}</span>
-                            <span className="text-xs text-gray-400 bg-white px-2 py-1 rounded border">{s.code}</span>
-                        </div>
-                    ))}
-                     {subjects.length === 0 && <p className="text-center text-gray-500 py-4">No subjects added</p>}
-                </CardContent>
-            </Card>
+
+            {/* Curriculum Management (Courses & Subjects) */}
+            <ManageCurriculum />
         </div>
     </div>
   );

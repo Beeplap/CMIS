@@ -1,31 +1,16 @@
 "use client";
-import React, { useState, useEffect } from "react";
-import { Plus, Trash2, ChevronDown, ChevronRight, BookOpen } from "lucide-react";
+import React, { useState, useEffect, Fragment } from "react";
+import { Plus, Trash2, ChevronDown, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { 
-  Dialog, 
-  DialogContent, 
-  DialogHeader, 
-  DialogTitle, 
-  DialogFooter 
-} from "@/components/ui/dialog";
-import { 
-  Select, 
-  SelectContent, 
-  SelectItem, 
-  SelectTrigger, 
-  SelectValue 
-} from "@/components/ui/select";
-import { toast } from "sonner"; // Assuming sonner or generic toast
+import { Dialog, Transition } from "@headlessui/react";
 
 export default function ManageCurriculum() {
   const [courses, setCourses] = useState([]);
   const [subjects, setSubjects] = useState([]);
   const [loading, setLoading] = useState(true);
   const [expandedCourse, setExpandedCourse] = useState(null); // ID of expanded course
-  const [expandedSemester, setExpandedSemester] = useState(null); // `${courseId}-${sem}`
 
   // Add Subject Modal State
   const [showAddSubject, setShowAddSubject] = useState(false);
@@ -37,6 +22,8 @@ export default function ManageCurriculum() {
     credits: 3,
     type: "Core"
   });
+  const [modalError, setModalError] = useState("");
+  const [modalSuccess, setModalSuccess] = useState("");
 
   useEffect(() => {
     fetchCoursesAndSubjects();
@@ -62,15 +49,18 @@ export default function ManageCurriculum() {
   };
 
   const handleAddSubjectStart = (courseId, semester) => {
-    setNewSubject({ ...newSubject, course_id: courseId, semester: semester });
+    setNewSubject({ name: "", code: "", course_id: courseId, semester: semester, credits: 3, type: "Core" });
+    setModalError("");
+    setModalSuccess("");
     setShowAddSubject(true);
   };
 
   const handleAddSubjectSubmit = async () => {
+    setModalError("");
+    setModalSuccess("");
     try {
       if(!newSubject.name || !newSubject.code) {
-        alert("Name and Code are required");
-        return;
+        throw new Error("Name and Code are required");
       }
       
       const res = await fetch("/api/subjects", {
@@ -84,12 +74,12 @@ export default function ManageCurriculum() {
         throw new Error(json.error || "Failed to add subject");
       }
 
-      setShowAddSubject(false);
-      setNewSubject({ name: "", code: "", course_id: "", semester: "", credits: 3, type: "Core" });
+      setModalSuccess("Subject added successfully!");
       fetchCoursesAndSubjects();
-      // toast.success("Subject added");
+      setTimeout(() => setShowAddSubject(false), 1000);
+      
     } catch (error) {
-      alert(error.message);
+      setModalError(error.message);
     }
   };
 
@@ -103,7 +93,10 @@ export default function ManageCurriculum() {
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <h2 className="text-2xl font-bold">Curriculum Management</h2>
+        <div>
+           <h2 className="text-2xl font-bold">Curriculum Management</h2>
+           <p className="text-sm text-gray-500">Manage courses, semesters, and subjects</p>
+        </div>
       </div>
 
       <div className="grid gap-4">
@@ -169,41 +162,53 @@ export default function ManageCurriculum() {
         ))}
       </div>
 
-       {/* Add Subject Dialog - Using simplified inline conditional since shadcn Dialog might vary in setup */}
-      {showAddSubject && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-            <div className="w-full max-w-md bg-white rounded-lg shadow-xl p-6">
-                <h3 className="text-lg font-bold mb-4">Add Subject</h3>
-                <div className="space-y-3">
-                    <div>
-                        <label className="text-sm font-medium">Subject Name</label>
-                        <Input value={newSubject.name} onChange={e => setNewSubject({...newSubject, name: e.target.value})} placeholder="e.g. C Programming"/>
-                    </div>
-                    <div>
-                        <label className="text-sm font-medium">Subject Code</label>
-                        <Input value={newSubject.code} onChange={e => setNewSubject({...newSubject, code: e.target.value})} placeholder="e.g. CACS101"/>
-                    </div>
-                    <div className="flex gap-4">
-                        <div className="flex-1">
-                             <label className="text-sm font-medium">Credits</label>
-                             <Input type="number" value={newSubject.credits} onChange={e => setNewSubject({...newSubject, credits: e.target.value})} />
-                        </div>
-                         <div className="flex-1">
-                             <label className="text-sm font-medium">Type</label>
-                             <select className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={newSubject.type} onChange={e => setNewSubject({...newSubject, type: e.target.value})}>
-                                <option value="Core">Core</option>
-                                <option value="Elective">Elective</option>
-                             </select>
-                        </div>
-                    </div>
-                </div>
-                <div className="flex justify-end gap-2 mt-6">
-                    <Button variant="ghost" onClick={() => setShowAddSubject(false)}>Cancel</Button>
-                    <Button onClick={handleAddSubjectSubmit}>Save Subject</Button>
-                </div>
-            </div>
-        </div>
-      )}
+      {/* Headless UI Modal for Add Subject */}
+      <Transition appear show={showAddSubject} as={Fragment}>
+        <Dialog as="div" className="relative z-50" onClose={() => setShowAddSubject(false)}>
+          <div className="fixed inset-0 bg-black/50" aria-hidden="true" />
+          <div className="fixed inset-0 flex items-center justify-center p-4">
+            <Dialog.Panel className="w-full max-w-md bg-white rounded-lg shadow-xl p-6 border">
+              <Dialog.Title className="text-lg font-bold mb-4">Add Subject</Dialog.Title>
+              
+              {modalError && <p className="text-sm text-red-600 mb-3">{modalError}</p>}
+              {modalSuccess && <p className="text-sm text-green-600 mb-3">{modalSuccess}</p>}
+
+              <div className="space-y-4">
+                  <div>
+                      <label className="text-sm font-medium">Subject Name</label>
+                      <Input value={newSubject.name} onChange={e => setNewSubject({...newSubject, name: e.target.value})} placeholder="e.g. C Programming"/>
+                  </div>
+                  <div>
+                      <label className="text-sm font-medium">Subject Code</label>
+                      <Input value={newSubject.code} onChange={e => setNewSubject({...newSubject, code: e.target.value})} placeholder="e.g. CACS101"/>
+                  </div>
+                  <div className="flex gap-4">
+                      <div className="flex-1">
+                           <label className="text-sm font-medium">Credits</label>
+                           <Input type="number" value={newSubject.credits} onChange={e => setNewSubject({...newSubject, credits: e.target.value})} />
+                      </div>
+                       <div className="flex-1">
+                           <label className="text-sm font-medium">Type</label>
+                           <select 
+                             className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" 
+                             value={newSubject.type} 
+                             onChange={e => setNewSubject({...newSubject, type: e.target.value})}
+                           >
+                              <option value="Core">Core</option>
+                              <option value="Elective">Elective</option>
+                           </select>
+                      </div>
+                  </div>
+              </div>
+
+              <div className="flex justify-end gap-2 mt-6">
+                  <Button variant="ghost" onClick={() => setShowAddSubject(false)}>Cancel</Button>
+                  <Button onClick={handleAddSubjectSubmit} className="bg-purple-600 text-white hover:bg-purple-700">Save Subject</Button>
+              </div>
+            </Dialog.Panel>
+          </div>
+        </Dialog>
+      </Transition>
 
     </div>
   );
