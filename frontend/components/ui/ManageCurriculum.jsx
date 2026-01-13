@@ -25,6 +25,16 @@ export default function ManageCurriculum() {
   const [modalError, setModalError] = useState("");
   const [modalSuccess, setModalSuccess] = useState("");
 
+  // Add Course Modal State
+  const [showAddCourse, setShowAddCourse] = useState(false);
+  const [newCourse, setNewCourse] = useState({
+    name: "",
+    code: "",
+    type: "Semester",
+    duration: 8
+  });
+
+
   useEffect(() => {
     fetchCoursesAndSubjects();
   }, []);
@@ -83,6 +93,36 @@ export default function ManageCurriculum() {
     }
   };
 
+  const handleAddCourseSubmit = async () => {
+    setModalError("");
+    setModalSuccess("");
+    try {
+      if(!newCourse.name || !newCourse.code || !newCourse.duration) {
+        throw new Error("All fields are required");
+      }
+
+      const res = await fetch("/api/courses", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(newCourse)
+      });
+
+      if(!res.ok) {
+        const json = await res.json();
+        throw new Error(json.error || "Failed to add course");
+      }
+
+      setModalSuccess("Course added successfully!");
+      fetchCoursesAndSubjects();
+      setShowAddCourse(false);
+      // Reset form
+      setNewCourse({ name: "", code: "", type: "Semester", duration: 8 });
+      
+    } catch (error) {
+      setModalError(error.message);
+    }
+  };
+
   // Group subjects by Course -> Semester
   const getSubjects = (courseId, semester) => {
     return subjects.filter(s => s.course_id === courseId && s.semester == semester);
@@ -97,6 +137,13 @@ export default function ManageCurriculum() {
            <h2 className="text-2xl font-bold">Curriculum Management</h2>
            <p className="text-sm text-gray-500">Manage courses, semesters, and subjects</p>
         </div>
+        <Button onClick={() => {
+            setModalError("");
+            setModalSuccess("");
+            setShowAddCourse(true);
+        }} className="bg-purple-600">
+            <Plus className="w-4 h-4 mr-2"/> Add Curriculum
+        </Button>
       </div>
 
       <div className="grid gap-4">
@@ -204,6 +251,54 @@ export default function ManageCurriculum() {
               <div className="flex justify-end gap-2 mt-6">
                   <Button variant="ghost" onClick={() => setShowAddSubject(false)}>Cancel</Button>
                   <Button onClick={handleAddSubjectSubmit} className="bg-purple-600 text-white hover:bg-purple-700">Save Subject</Button>
+              </div>
+            </Dialog.Panel>
+          </div>
+        </Dialog>
+      </Transition>
+
+      {/* Headless UI Modal for Add Course */}
+      <Transition appear show={showAddCourse} as={Fragment}>
+        <Dialog as="div" className="relative z-50" onClose={() => setShowAddCourse(false)}>
+          <div className="fixed inset-0 bg-black/50" aria-hidden="true" />
+          <div className="fixed inset-0 flex items-center justify-center p-4">
+            <Dialog.Panel className="w-full max-w-md bg-white rounded-lg shadow-xl p-6 border">
+              <Dialog.Title className="text-lg font-bold mb-4">Add Curriculum</Dialog.Title>
+              
+              {modalError && <p className="text-sm text-red-600 mb-3">{modalError}</p>}
+              {modalSuccess && <p className="text-sm text-green-600 mb-3">{modalSuccess}</p>}
+
+              <div className="space-y-4">
+                  <div>
+                      <label className="text-sm font-medium">Course Name</label>
+                      <Input value={newCourse.name} onChange={e => setNewCourse({...newCourse, name: e.target.value})} placeholder="e.g. Bachelor of Arts"/>
+                  </div>
+                  <div>
+                      <label className="text-sm font-medium">Course Code</label>
+                      <Input value={newCourse.code} onChange={e => setNewCourse({...newCourse, code: e.target.value})} placeholder="e.g. BA"/>
+                  </div>
+                  <div className="flex gap-4">
+                       <div className="flex-1">
+                           <label className="text-sm font-medium">System Type</label>
+                           <select 
+                             className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" 
+                             value={newCourse.type} 
+                             onChange={e => setNewCourse({...newCourse, type: e.target.value})}
+                           >
+                              <option value="Semester">Semester</option>
+                              <option value="Yearly">Yearly</option>
+                           </select>
+                      </div>
+                      <div className="flex-1">
+                           <label className="text-sm font-medium">Duration ({newCourse.type === 'Semester' ? 'Semesters' : 'Years'})</label>
+                           <Input type="number" value={newCourse.duration} onChange={e => setNewCourse({...newCourse, duration: parseInt(e.target.value)})} />
+                      </div>
+                  </div>
+              </div>
+
+              <div className="flex justify-end gap-2 mt-6">
+                  <Button variant="ghost" onClick={() => setShowAddCourse(false)}>Cancel</Button>
+                  <Button onClick={handleAddCourseSubmit} className="bg-purple-600 text-white hover:bg-purple-700">Add Course</Button>
               </div>
             </Dialog.Panel>
           </div>

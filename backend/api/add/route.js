@@ -1,6 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
 
-// In the App Router, define method exports like POST/GET, not a default handler
 export async function POST(request) {
   try {
     const supabaseAdmin = createClient(

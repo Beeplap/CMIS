@@ -138,9 +138,7 @@ export default function AddUser({ open, onClose, onUserAdded, defaultRole = "tea
               <CardTitle className="text-lg font-semibold text-gray-800 dark:text-gray-100">
                 Add New User
               </CardTitle>
-              <div className="text-xs opacity-70">
-                Create a new user account
-              </div>
+             
             </CardHeader>
 
             <CardContent className="space-y-4">
@@ -197,7 +195,6 @@ export default function AddUser({ open, onClose, onUserAdded, defaultRole = "tea
                 >
                   <option value="student">Student</option>
                   <option value="teacher">Teacher</option>
-                  <option value="admin">Admin</option>
                 </select>
               </div>
 
