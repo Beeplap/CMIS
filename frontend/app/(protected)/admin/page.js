@@ -27,9 +27,10 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import AddUser from "@/components/ui/addUser"; // Existing component
-import AddClass from "@/components/ui/addClass"; // Existing component
+import AddUser from "@/components/ui/addUser"; 
 import ManageCurriculum from "@/components/ui/ManageCurriculum";
+import ManageBatches from "@/components/dashboard/ManageBatches";
+import AssignTeacher from "@/components/dashboard/AssignTeacher";
 
 export default function AdminPage() {
   const router = useRouter();
@@ -43,7 +44,6 @@ export default function AdminPage() {
   const [profiles, setProfiles] = useState([]);
   const [students, setStudents] = useState([]);
   const [teachers, setTeachers] = useState([]);
-  const [classes, setClasses] = useState([]);
   const [subjects, setSubjects] = useState([]);
   const [notices, setNotices] = useState([]);
   const [fees, setFees] = useState([]);
@@ -51,7 +51,6 @@ export default function AdminPage() {
   // Modal States
   const [showAddUser, setShowAddUser] = useState(false);
   const [addUserRole, setAddUserRole] = useState("student");
-  const [showAddClass, setShowAddClass] = useState(false);
   
   // Filter States
   const [searchQuery, setSearchQuery] = useState("");
@@ -96,10 +95,6 @@ export default function AdminPage() {
     // Fetch Students
     const { data: studentsData } = await supabase.from("students").select("*");
     if (studentsData) setStudents(studentsData);
-
-    // Fetch Classes
-    const { data: classesData } = await supabase.from("classes").select("*");
-    if (classesData) setClasses(classesData);
 
     // Fetch Subjects (Mock or API)
     try {
@@ -337,56 +332,25 @@ export default function AdminPage() {
      )
   }
 
-  // 4. Class & Subjects Component
-  const renderClasses = () => (
-    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-        <div className="flex flex-col gap-6">
-            {/* Active Class Assignments */}
-            <Card>
-                <CardHeader className="flex flex-row items-center justify-between">
-                    <div>
-                        <CardTitle>Active Class Assignments</CardTitle>
-                        <p className="text-sm text-gray-500 mt-1">Manage currently running classes and teacher assignments</p>
-                    </div>
-                    <Button onClick={() => setShowAddClass(true)} className="bg-purple-600"><Plus className="w-4 h-4 mr-2"/> Assign Class</Button>
-                </CardHeader>
-                <CardContent>
-                    {classes.length === 0 ? (
-                         <div className="text-center py-8 bg-gray-50 rounded-lg">
-                            <p className="text-gray-500">No active classes assigned yet.</p>
-                            <Button variant="link" onClick={() => setShowAddClass(true)}>Assign one now</Button>
-                         </div>
-                    ) : (
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                            {classes.map(c => (
-                                <div key={c.id} className="p-4 bg-white border rounded-lg shadow-sm hover:shadow-md transition-shadow relative group">
-                                    <h4 className="font-bold text-lg text-gray-800">{c.course}</h4>
-                                    <div className="flex gap-2 mb-2">
-                                         <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs font-medium">
-                                            {c.semester <= 8 ? 'Sem ' + c.semester : 'Year ' + c.semester}
-                                         </span>
-                                         {c.section && <span className="px-2 py-0.5 bg-gray-100 text-gray-700 rounded text-xs">{c.section}</span>}
-                                    </div>
-                                    <p className="text-sm font-medium text-gray-900 mb-1">{c.subject}</p>
-                                    <p className="text-xs text-gray-500 flex items-center gap-1">
-                                        <UserCheck className="w-3 h-3"/> {c.teacher ? c.teacher.full_name : 'No Teacher'}
-                                    </p>
-                                    <Button variant="ghost" size="sm" className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 text-red-500" onClick={async () => {
-                                        if(confirm("Remove this class assignment?")) {
-                                            await fetch(`/api/classes?id=${c.id}`, { method: 'DELETE' });
-                                            fetchAllData();
-                                        }
-                                    }}>
-                                        <Trash2 className="w-4 h-4"/>
-                                    </Button>
-                                </div>
-                            ))}
-                        </div>
-                    )}
-                </CardContent>
-            </Card>
+  // 4. Academics Management Component
+  const renderAcademics = () => (
+    <div className="space-y-10 animate-in fade-in slide-in-from-bottom-4 duration-500">
+        
+        {/* Unit 1: Batch Management */}
+        <div className="flex flex-col gap-4">
+             <h2 className="text-2xl font-bold border-b pb-2">Batch Management</h2>
+             <ManageBatches />
+        </div>
 
-            {/* Curriculum Management (Courses & Subjects) */}
+        {/* Unit 2: Assignment Management */}
+        <div className="flex flex-col gap-4">
+             <h2 className="text-2xl font-bold border-b pb-2">Teaching Assignments</h2>
+             <AssignTeacher />
+        </div>
+
+        {/* Unit 3: Curriculum Management */}
+        <div className="flex flex-col gap-4">
+            <h2 className="text-2xl font-bold border-b pb-2">Curriculum Setup</h2>
             <ManageCurriculum />
         </div>
     </div>
@@ -607,7 +571,7 @@ export default function AdminPage() {
         onViewChange={setCurrentView}
         onAddStudent={()=>{setAddUserRole("student"); setShowAddUser(true);}}
         onAddTeacher={()=>{setAddUserRole("teacher"); setShowAddUser(true);}}
-        onAssignClass={()=>{setShowAddClass(true)}}
+        onAssignClass={()=>{setCurrentView('subjects')}}
       />
       
       <main className="flex-1 p-6 md:p-8 overflow-y-auto h-screen">
@@ -621,7 +585,7 @@ export default function AdminPage() {
         {currentView === "dashboard" && renderDashboard()}
         {currentView === "students" && renderStudents()}
         {currentView === "teachers" && renderTeachers()}
-        {currentView === "subjects" && renderClasses()} 
+        {currentView === "subjects" && renderAcademics()} 
         {/* Note: Sidebar uses 'subjects' ID for Class & Subject Management */}
         {currentView === "attendance" && renderAttendance()}
         {currentView === "fees" && renderFees()}
@@ -638,19 +602,7 @@ export default function AdminPage() {
         defaultRole={addUserRole} 
       />
 
-      {showAddClass && (
-           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-            <div className="w-full max-w-lg bg-white rounded-lg shadow-xl">
-                 <div className="flex justify-between items-center p-4 border-b">
-                    <h3 className="text-lg font-semibold">Assign Class</h3>
-                    <Button variant="ghost" onClick={() => setShowAddClass(false)}><XCircle className="w-5 h-5"/></Button>
-                </div>
-                <div className="p-4">
-                    <AddClass onClose={() => {setShowAddClass(false); fetchAllData();}} />
-                </div>
-            </div>
-           </div>
-      )}
+
     </div>
   );
 }
