@@ -44,6 +44,7 @@ export default function AdminPage() {
   const [profiles, setProfiles] = useState([]);
   const [students, setStudents] = useState([]);
   const [teachers, setTeachers] = useState([]);
+  const [batches, setBatches] = useState([]);
   const [subjects, setSubjects] = useState([]);
   const [notices, setNotices] = useState([]);
   const [fees, setFees] = useState([]);
@@ -96,14 +97,9 @@ export default function AdminPage() {
     const { data: studentsData } = await supabase.from("students").select("*");
     if (studentsData) setStudents(studentsData);
 
-    // Fetch Subjects (Mock or API)
-    try {
-      const res = await fetch("/api/subjects");
-      if (res.ok) {
-        const json = await res.json();
-        setSubjects(json.subjects || []);
-      }
-    } catch (e) { console.error("Subjects fetch error", e); }
+    // Fetch Batches
+    const { data: batchesData } = await supabase.from("batches").select("*, course:courses(code)").eq("is_active", true);
+    if (batchesData) setBatches(batchesData);
 
     // Fetch Notices
     const { data: noticesData } = await supabase.from("notices").select("*").order("date", { ascending: false });
@@ -184,8 +180,8 @@ export default function AdminPage() {
           bg="bg-purple-100" 
         />
         <StatsCard 
-          title="Classes" 
-          value={classes.length} 
+          title="Active Batches" 
+          value={batches.length} 
           icon={LayoutDashboard} 
           color="text-green-600" 
           bg="bg-green-100" 
@@ -396,8 +392,12 @@ export default function AdminPage() {
                     fetchAttendance(e.target.value, attendanceDate);
                 }}
               >
-                  <option value="">Select Class</option>
-                  {classes.map(c => <option key={c.id} value={c.id}>{c.course}</option>)}
+                  <option value="">Select Batch</option>
+                  {batches.map(b => (
+                    <option key={b.id} value={b.id}>
+                      {b.course?.code} {b.academic_unit} {b.section ? `(${b.section})` : ''}
+                    </option>
+                  ))}
               </select>
               <input 
                 type="date" 
@@ -440,7 +440,7 @@ export default function AdminPage() {
                               ))
                           ) : (
                              <tr><td colSpan="4" className="px-6 py-8 text-center text-gray-500">
-                                 {selectedAttendanceClass ? "No records found for this date." : "Select a class to view attendance records"}
+                                 {selectedAttendanceClass ? "No records found for this date." : "Select a batch to view attendance records"}
                              </td></tr>
                           )}
                       </tbody>
