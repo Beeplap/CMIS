@@ -89,16 +89,8 @@ export async function POST(req) {
       }
     }
 
-    // Check DOB
-    if (
-      new Date(invitation.dob).toISOString().split("T")[0] !==
-      new Date(dob).toISOString().split("T")[0]
-    ) {
-      return NextResponse.json(
-        { error: "Date of Birth does not match our records." },
-        { status: 400 },
-      );
-    }
+    // Check DOB - Validation Removed as per user request (Step 95)
+    // We trust the student's input DOB and will save it to their profile instead of matching it.
 
     // 5. Create Auth User
     const { data: authData, error: authError } =

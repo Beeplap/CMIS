@@ -154,7 +154,7 @@ export default function SignupPage() {
 
           <div className="border-t pt-4">
             <h3 className="text-sm font-medium text-gray-500 mb-4 uppercase tracking-wider">
-              Account Credentials
+              Create a new account
             </h3>
             <div className="space-y-4">
               <div>
