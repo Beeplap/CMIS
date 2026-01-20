@@ -13,11 +13,23 @@ export default function StudentProfile({ studentData, user }) {
     phone_number: studentData?.phone_number || "",
     address: studentData?.address || "",
     guardian_contact: studentData?.guardian_contact || "",
+    guardian_name: studentData?.guardian_name || "",
+    guardian_phone: studentData?.guardian_phone || "",
+    emergency_contact: studentData?.emergency_contact || "",
+    dob: studentData?.dob || "",
+    gender: studentData?.gender || "",
   });
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
     router.replace("/login");
+  };
+
+  const handleChangePassword = () => {
+    // In a real app, this would open a modal or redirect
+    alert(
+      "Password change functionality would be implemented here (e.g., /settings/security).",
+    );
   };
 
   const handleUpdateProfile = async () => {
@@ -28,13 +40,18 @@ export default function StudentProfile({ studentData, user }) {
           phone_number: formData.phone_number,
           address: formData.address,
           guardian_contact: formData.guardian_contact,
+          guardian_name: formData.guardian_name,
+          guardian_phone: formData.guardian_phone,
+          emergency_contact: formData.emergency_contact,
+          dob: formData.dob || null, // Handle empty string as null
+          gender: formData.gender,
         })
         .eq("id", user.id);
 
       if (error) throw error;
       alert("Profile updated successfully!");
       setIsEditing(false);
-      window.location.reload(); // Simple reload to refresh data
+      window.location.reload(); // Reload to refresh data
     } catch (error) {
       alert("Error updating profile: " + error.message);
     }
@@ -71,34 +88,137 @@ export default function StudentProfile({ studentData, user }) {
             </p>
           </div>
 
-          <div className="grid gap-4">
-            <div className="flex justify-between p-3 border rounded hover:bg-gray-50 items-center">
-              <span className="text-gray-500">Guardian Name</span>
-              <span className="font-medium">
-                {studentData?.guardian_name || "N/A"}
-              </span>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Personal Info Header */}
+            <div className="col-span-full border-b pb-2 mb-2">
+              <h3 className="text-sm font-semibold text-gray-500">
+                Personal Information
+              </h3>
             </div>
-            <div className="flex justify-between p-3 border rounded hover:bg-gray-50 items-center">
-              <span className="text-gray-500">Contact</span>
+
+            {/* Gender */}
+            <div className="space-y-1">
+              <label className="text-xs text-gray-500">Gender</label>
+              {isEditing ? (
+                <select
+                  className="w-full border rounded px-2 py-1"
+                  value={formData.gender}
+                  onChange={(e) =>
+                    setFormData({ ...formData, gender: e.target.value })
+                  }
+                >
+                  <option value="">Select Gender</option>
+                  <option value="Male">Male</option>
+                  <option value="Female">Female</option>
+                  <option value="Other">Other</option>
+                </select>
+              ) : (
+                <p className="font-medium">{studentData?.gender || "N/A"}</p>
+              )}
+            </div>
+
+            {/* DOB */}
+            <div className="space-y-1">
+              <label className="text-xs text-gray-500">Date of Birth</label>
               {isEditing ? (
                 <input
-                  className="border rounded px-2 py-1"
+                  type="date"
+                  className="w-full border rounded px-2 py-1"
+                  value={formData.dob}
+                  onChange={(e) =>
+                    setFormData({ ...formData, dob: e.target.value })
+                  }
+                />
+              ) : (
+                <p className="font-medium">{studentData?.dob || "N/A"}</p>
+              )}
+            </div>
+
+            {/* Phone */}
+            <div className="space-y-1">
+              <label className="text-xs text-gray-500">Phone Number</label>
+              {isEditing ? (
+                <input
+                  className="w-full border rounded px-2 py-1"
                   value={formData.phone_number}
                   onChange={(e) =>
                     setFormData({ ...formData, phone_number: e.target.value })
                   }
                 />
               ) : (
-                <span className="font-medium">
+                <p className="font-medium">
                   {studentData?.phone_number || "N/A"}
-                </span>
+                </p>
               )}
             </div>
-            <div className="flex justify-between p-3 border rounded hover:bg-gray-50 items-center">
-              <span className="text-gray-500">Guardian Contact</span>
+
+            {/* Address */}
+            <div className="space-y-1">
+              <label className="text-xs text-gray-500">Address</label>
               {isEditing ? (
                 <input
-                  className="border rounded px-2 py-1"
+                  className="w-full border rounded px-2 py-1"
+                  value={formData.address}
+                  onChange={(e) =>
+                    setFormData({ ...formData, address: e.target.value })
+                  }
+                />
+              ) : (
+                <p className="font-medium">{studentData?.address || "N/A"}</p>
+              )}
+            </div>
+
+            {/* Guardian Info Header */}
+            <div className="col-span-full border-b pb-2 mb-2 mt-4">
+              <h3 className="text-sm font-semibold text-gray-500">
+                Guardian & Emergency
+              </h3>
+            </div>
+
+            {/* Guardian Name */}
+            <div className="space-y-1">
+              <label className="text-xs text-gray-500">Guardian Name</label>
+              {isEditing ? (
+                <input
+                  className="w-full border rounded px-2 py-1"
+                  value={formData.guardian_name}
+                  onChange={(e) =>
+                    setFormData({ ...formData, guardian_name: e.target.value })
+                  }
+                />
+              ) : (
+                <p className="font-medium">
+                  {studentData?.guardian_name || "N/A"}
+                </p>
+              )}
+            </div>
+
+            {/* Guardian Phone */}
+            <div className="space-y-1">
+              <label className="text-xs text-gray-500">Guardian Phone</label>
+              {isEditing ? (
+                <input
+                  className="w-full border rounded px-2 py-1"
+                  value={formData.guardian_phone}
+                  onChange={(e) =>
+                    setFormData({ ...formData, guardian_phone: e.target.value })
+                  }
+                />
+              ) : (
+                <p className="font-medium">
+                  {studentData?.guardian_phone || "N/A"}
+                </p>
+              )}
+            </div>
+
+            {/* Guardian Contact (Alt) */}
+            <div className="space-y-1">
+              <label className="text-xs text-gray-500">
+                Guardian Contact (Alt)
+              </label>
+              {isEditing ? (
+                <input
+                  className="w-full border rounded px-2 py-1"
                   value={formData.guardian_contact}
                   onChange={(e) =>
                     setFormData({
@@ -108,25 +228,30 @@ export default function StudentProfile({ studentData, user }) {
                   }
                 />
               ) : (
-                <span className="font-medium">
+                <p className="font-medium">
                   {studentData?.guardian_contact || "N/A"}
-                </span>
+                </p>
               )}
             </div>
-            <div className="flex justify-between p-3 border rounded hover:bg-gray-50 items-center">
-              <span className="text-gray-500">Address</span>
+
+            {/* Emergency Contact */}
+            <div className="space-y-1">
+              <label className="text-xs text-gray-500">Emergency Contact</label>
               {isEditing ? (
                 <input
-                  className="border rounded px-2 py-1"
-                  value={formData.address}
+                  className="w-full border rounded px-2 py-1"
+                  value={formData.emergency_contact}
                   onChange={(e) =>
-                    setFormData({ ...formData, address: e.target.value })
+                    setFormData({
+                      ...formData,
+                      emergency_contact: e.target.value,
+                    })
                   }
                 />
               ) : (
-                <span className="font-medium">
-                  {studentData?.address || "N/A"}
-                </span>
+                <p className="font-medium">
+                  {studentData?.emergency_contact || "N/A"}
+                </p>
               )}
             </div>
           </div>
@@ -134,7 +259,7 @@ export default function StudentProfile({ studentData, user }) {
           {isEditing && (
             <Button
               onClick={handleUpdateProfile}
-              className="w-full bg-purple-600 hover:bg-purple-700"
+              className="w-full bg-purple-600 hover:bg-purple-700 mt-6"
             >
               Save Changes
             </Button>
@@ -147,7 +272,7 @@ export default function StudentProfile({ studentData, user }) {
           <Button
             variant="outline"
             className="w-full justify-start"
-            onClick={() => alert("Change password flow")}
+            onClick={handleChangePassword}
           >
             <Key className="w-4 h-4 mr-2" /> Change Password
           </Button>
