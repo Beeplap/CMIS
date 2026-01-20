@@ -1,16 +1,15 @@
 "use client";
 import React, { useState, useEffect } from "react";
 import { Button } from "./button";
-import {
-  Card,
-  CardHeader,
-  CardTitle,
-  CardContent,
-  CardFooter,
-} from "./card";
+import { Card, CardHeader, CardTitle, CardContent, CardFooter } from "./card";
 import { Dialog } from "@headlessui/react";
 
-export default function AddUser({ open, onClose, onUserAdded, defaultRole = "teacher" }) {
+export default function AddUser({
+  open,
+  onClose,
+  onUserAdded,
+  defaultRole = "teacher",
+}) {
   const [addLoading, setAddLoading] = useState(false);
   const [addError, setAddError] = useState("");
   const [addSuccess, setAddSuccess] = useState("");
@@ -18,11 +17,11 @@ export default function AddUser({ open, onClose, onUserAdded, defaultRole = "tea
   const [newPassword, setNewPassword] = useState("");
   const [newFullName, setNewFullName] = useState("");
   const [newRole, setNewRole] = useState(defaultRole);
-  
+
   // Student-specific fields
   const [gender, setGender] = useState("");
-  const [studentClass, setStudentClass] = useState("");
-  const [section, setSection] = useState("");
+  const [selectedBatchId, setSelectedBatchId] = useState("");
+  const [batches, setBatches] = useState([]);
   const [phoneNumber, setPhoneNumber] = useState("");
   const [guardianName, setGuardianName] = useState("");
   const [guardianPhone, setGuardianPhone] = useState("");
@@ -37,8 +36,7 @@ export default function AddUser({ open, onClose, onUserAdded, defaultRole = "tea
       setNewRole(defaultRole);
       // Reset student-specific fields when opening
       setGender("");
-      setStudentClass("");
-      setSection("");
+      setSelectedBatchId("");
       setPhoneNumber("");
       setGuardianName("");
       setGuardianPhone("");
@@ -47,7 +45,23 @@ export default function AddUser({ open, onClose, onUserAdded, defaultRole = "tea
       setDateOfBirth("");
       setAdmissionDate("");
     }
-  }, [defaultRole, open]);
+    // Fetch batches if role is student
+    if (defaultRole === "student" || newRole === "student") {
+      fetchBatches();
+    }
+  }, [defaultRole, open, newRole]);
+
+  const fetchBatches = async () => {
+    try {
+      const res = await fetch("/api/batches");
+      if (res.ok) {
+        const data = await res.json();
+        setBatches(data.batches || []);
+      }
+    } catch (error) {
+      console.error("Failed to fetch batches:", error);
+    }
+  };
 
   const handleAddUser = async () => {
     setAddLoading(true);
@@ -57,8 +71,10 @@ export default function AddUser({ open, onClose, onUserAdded, defaultRole = "tea
     try {
       // Validate student-specific fields if role is student
       if (newRole === "student") {
-        if (!gender || !studentClass || !phoneNumber) {
-          throw new Error("Please fill all required student fields");
+        if (!gender || !selectedBatchId || !phoneNumber) {
+          throw new Error(
+            "Please fill all required student fields (Gender, Batch, Phone)",
+          );
         }
       }
 
@@ -72,8 +88,7 @@ export default function AddUser({ open, onClose, onUserAdded, defaultRole = "tea
       // Add student-specific fields
       if (newRole === "student") {
         requestBody.gender = gender;
-        requestBody.class = studentClass;
-        requestBody.section = section;
+        requestBody.batch_id = selectedBatchId;
         requestBody.phone_number = phoneNumber;
         requestBody.guardian_name = guardianName;
         requestBody.guardian_phone = guardianPhone;
@@ -101,8 +116,7 @@ export default function AddUser({ open, onClose, onUserAdded, defaultRole = "tea
       setNewFullName("");
       setNewRole("teacher");
       setGender("");
-      setStudentClass("");
-      setSection("");
+      setSelectedBatchId("");
       setPhoneNumber("");
       setGuardianName("");
       setGuardianPhone("");
@@ -110,7 +124,7 @@ export default function AddUser({ open, onClose, onUserAdded, defaultRole = "tea
       setAddress("");
       setDateOfBirth("");
       setAdmissionDate("");
-      
+
       onUserAdded();
 
       setTimeout(() => {
@@ -125,11 +139,7 @@ export default function AddUser({ open, onClose, onUserAdded, defaultRole = "tea
   };
 
   return (
-    <Dialog
-      open={open}
-      onClose={onClose}
-      className="relative z-50"
-    >
+    <Dialog open={open} onClose={onClose} className="relative z-50">
       <div className="fixed inset-0 bg-black/50" aria-hidden="true" />
       <div className="fixed inset-0 flex items-center justify-center p-4">
         <Dialog.Panel className="bg-white dark:bg-gray-900 rounded-lg shadow-xl w-full max-w-2xl border border-gray-300 dark:border-gray-700 max-h-[90vh] overflow-y-auto">
@@ -138,7 +148,6 @@ export default function AddUser({ open, onClose, onUserAdded, defaultRole = "tea
               <CardTitle className="text-lg font-semibold text-gray-800 dark:text-gray-100">
                 Add New User
               </CardTitle>
-             
             </CardHeader>
 
             <CardContent className="space-y-4">
@@ -154,7 +163,9 @@ export default function AddUser({ open, onClose, onUserAdded, defaultRole = "tea
               )}
 
               <div>
-                <label className="block text-sm font-medium mb-1">Full Name</label>
+                <label className="block text-sm font-medium mb-1">
+                  Full Name
+                </label>
                 <input
                   type="text"
                   value={newFullName}
@@ -176,7 +187,9 @@ export default function AddUser({ open, onClose, onUserAdded, defaultRole = "tea
               </div>
 
               <div>
-                <label className="block text-sm font-medium mb-1">Password</label>
+                <label className="block text-sm font-medium mb-1">
+                  Password
+                </label>
                 <input
                   type="password"
                   value={newPassword}
@@ -224,30 +237,26 @@ export default function AddUser({ open, onClose, onUserAdded, defaultRole = "tea
                       </select>
                     </div>
 
-                    <div>
+                    <div className="sm:col-span-2">
                       <label className="block text-sm font-medium mb-1">
-                        Class <span className="text-red-500">*</span>
+                        Batch <span className="text-red-500">*</span>
                       </label>
-                      <input
-                        type="text"
-                        value={studentClass}
-                        onChange={(e) => setStudentClass(e.target.value)}
+                      <select
+                        value={selectedBatchId}
+                        onChange={(e) => setSelectedBatchId(e.target.value)}
                         className="w-full border rounded-md px-3 py-2 bg-white/80 dark:bg-black/20"
-                        placeholder="e.g., BCA, Grade 12"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium mb-1">
-                        Section
-                      </label>
-                      <input
-                        type="text"
-                        value={section}
-                        onChange={(e) => setSection(e.target.value)}
-                        className="w-full border rounded-md px-3 py-2 bg-white/80 dark:bg-black/20"
-                        placeholder="e.g., A, B"
-                      />
+                      >
+                        <option value="">Select Batch</option>
+                        {batches.map((batch) => (
+                          <option key={batch.id} value={batch.id}>
+                            {batch.course?.code}{" "}
+                            {batch.course?.type === "Yearly" ? "Year" : "Sem"}{" "}
+                            {batch.academic_unit}{" "}
+                            {batch.section ? `- Sec ${batch.section}` : ""} (
+                            {batch.admission_year})
+                          </option>
+                        ))}
+                      </select>
                     </div>
 
                     <div className="sm:col-span-2">
@@ -359,12 +368,12 @@ export default function AddUser({ open, onClose, onUserAdded, defaultRole = "tea
               <Button
                 onClick={handleAddUser}
                 disabled={
-                  addLoading || 
-                  !newEmail || 
-                  !newPassword || 
+                  addLoading ||
+                  !newEmail ||
+                  !newPassword ||
                   !newFullName ||
                   (newRole === "student" &&
-                    (!gender || !studentClass || !phoneNumber))
+                    (!gender || !selectedBatchId || !phoneNumber))
                 }
                 className="bg-gradient-to-r from-purple-600 to-violet-600 hover:from-purple-700 hover:to-violet-700 text-white"
               >
