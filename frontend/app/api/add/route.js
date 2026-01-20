@@ -28,7 +28,7 @@ export async function POST(req) {
     if (!email || !password || !full_name || !role) {
       return NextResponse.json(
         { error: "Missing required fields (email, password, full_name, role)" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -36,7 +36,7 @@ export async function POST(req) {
       if (!gender || !body.batch_id || !phone_number) {
         return NextResponse.json(
           { error: "Student requires gender, batch, and phone number." },
-          { status: 400 }
+          { status: 400 },
         );
       }
     }
@@ -48,7 +48,7 @@ export async function POST(req) {
     if (!supabaseUrl || !serviceRoleKey) {
       return NextResponse.json(
         { error: "Server misconfigured: Missing Supabase keys." },
-        { status: 500 }
+        { status: 500 },
       );
     }
 
@@ -60,12 +60,13 @@ export async function POST(req) {
     });
 
     // 3. Create Auth User
-    const { data: authData, error: authError } = await supabase.auth.admin.createUser({
-      email,
-      password,
-      email_confirm: true,
-      user_metadata: { full_name, role },
-    });
+    const { data: authData, error: authError } =
+      await supabase.auth.admin.createUser({
+        email,
+        password,
+        email_confirm: true,
+        user_metadata: { full_name, role },
+      });
 
     if (authError) {
       console.error("Auth creation error:", authError);
@@ -90,7 +91,7 @@ export async function POST(req) {
       await supabase.auth.admin.deleteUser(userId);
       return NextResponse.json(
         { error: "Failed to create user profile: " + userTableError.message },
-        { status: 500 }
+        { status: 500 },
       );
     }
 
@@ -99,7 +100,7 @@ export async function POST(req) {
       // Generate Teacher ID
       // Simple generator: TCH-{Random4Digits} to avoid race conditions with MAX()
       const teacherId = `TCH-${Math.floor(1000 + Math.random() * 9000)}`;
-      
+
       const { error: teacherError } = await supabase.from("teachers").insert({
         id: userId,
         full_name,
@@ -109,49 +110,67 @@ export async function POST(req) {
 
       if (teacherError) {
         console.error("Teachers table insert error:", teacherError);
-        // Note: User exists in 'users' and 'auth', but not 'teachers'. 
+        // Note: User exists in 'users' and 'auth', but not 'teachers'.
         // Admin might need to fix manually or we can fail harder.
         // For now, returning warning.
         return NextResponse.json(
-          { message: "User created, but failed to add to teachers table.", details: teacherError.message },
-          { status: 207 } // Multi-status / Partial success
+          {
+            message: "User created, but failed to add to teachers table.",
+            details: teacherError.message,
+          },
+          { status: 207 }, // Multi-status / Partial success
         );
       }
     } else if (role === "student") {
-      // Generate Roll Number
-      // Logic: ClassPrefix + Year + Random/Sequence
-      // Simplify: Uppercase alphanumeric class + Random 4 digits to minimize collision logic complexity
-      const classCode = (studentClass || "STD").toUpperCase().replace(/[^A-Z0-9]/g, "").substring(0, 4);
-      const rollNumber = `${classCode}-${Math.floor(1000 + Math.random() * 9000)}`;
-
+      // 1. Insert Student with reg_no as NULL (to be filled later if needed)
+      // Roll is initially NULL or temp, will be fixed by recalculateBatchRolls immediately
       const { error: studentError } = await supabase.from("students").insert({
         id: userId,
-        roll: rollNumber,
+        roll: null, // Will be assigned alphabetically below
+        reg_no: null, // As per requirements: Admin skips this, nullable in DB
         full_name,
-        batch_id: body.batch_id, // New Link
+        batch_id: body.batch_id,
         gender,
         phone_number,
         guardian_name: guardian_name || null,
         guardian_phone: guardian_phone || null,
         guardian_contact: guardian_contact || null,
         address: address || null,
-        dob: date_of_birth || null, 
-        admission_date: admission_date || new Date().toISOString().split('T')[0]
+        dob: date_of_birth || null,
+        admission_date:
+          admission_date || new Date().toISOString().split("T")[0],
       });
 
       if (studentError) {
-         console.error("Students table insert error:", studentError);
-         return NextResponse.json(
-          { message: "User created, but failed to add to students table.", details: studentError.message },
-          { status: 207 }
+        console.error("Students table insert error:", studentError);
+        return NextResponse.json(
+          {
+            message: "User created, but failed to add to students table.",
+            details: studentError.message,
+          },
+          { status: 207 },
         );
+      }
+
+      // 2. Recalculate Roll Numbers for the Batch
+      try {
+        const { recalculateBatchRolls } = await import("@/lib/rollGenerator");
+        await recalculateBatchRolls(supabase, body.batch_id);
+      } catch (rollError) {
+        console.error("Failed to recalculate rolls:", rollError);
+        // Don't fail the request, just log it.
       }
     }
 
-    return NextResponse.json({ message: "User created successfully" }, { status: 200 });
-
+    return NextResponse.json(
+      { message: "User created successfully" },
+      { status: 200 },
+    );
   } catch (err) {
     console.error("Unexpected error in /api/add:", err);
-    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Internal Server Error" },
+      { status: 500 },
+    );
   }
 }

@@ -128,7 +128,8 @@ export async function POST(req) {
     // 7. Insert into Students Table
     const { error: studentError } = await supabase.from("students").insert({
       id: userId,
-      roll: registrationNumber, // Using reg number as roll or similar unique ID
+      reg_no: registrationNumber, // Store the official Registration Number here
+      roll: null, // Roll number will be assigned when added to a batch
       full_name: fullName,
       dob: dob,
       // batch_id: invitation.batch_id // We don't have this yet in invitations, leaving null

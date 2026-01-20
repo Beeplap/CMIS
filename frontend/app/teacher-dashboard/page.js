@@ -3,12 +3,7 @@ import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useSidebar } from "@/hooks/useSidebar";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardHeader,
-  CardTitle,
-  CardContent,
-} from "@/components/ui/card";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { supabase } from "@/lib/supabaseClient";
 import NotificationBell from "@/components/ui/notificationBell";
 import {
@@ -21,7 +16,7 @@ import {
   Calendar,
   TrendingUp,
   AlertCircle,
-  FileText
+  FileText,
 } from "lucide-react";
 import Sidebar from "@/components/ui/Sidebar";
 
@@ -44,19 +39,34 @@ export default function TeacherDashboardPage() {
   const [userId, setUserId] = useState("");
   const [assignedClasses, setAssignedClasses] = useState([]);
   const [classesLoading, setClassesLoading] = useState(true);
-  const { sidebarOpen, setSidebarOpen, sidebarCollapsed, setSidebarCollapsed, toggleCollapsed } = useSidebar();
+  const {
+    sidebarOpen,
+    setSidebarOpen,
+    sidebarCollapsed,
+    setSidebarCollapsed,
+    toggleCollapsed,
+  } = useSidebar();
   const [attendanceStats, setAttendanceStats] = useState({
     todayTotal: 0,
     todaySuccessful: 0,
     todayMissed: 0,
-    timePercentages: { day: 0, week: 0, month: 0, threeMonths: 0, sixMonths: 0, year: 0 },
+    timePercentages: {
+      day: 0,
+      week: 0,
+      month: 0,
+      threeMonths: 0,
+      sixMonths: 0,
+      year: 0,
+    },
   });
   const [currentView, setCurrentView] = useState("dashboard");
 
   useEffect(() => {
     const fetchUser = async () => {
       try {
-        const { data: { user: authUser } } = await supabase.auth.getUser();
+        const {
+          data: { user: authUser },
+        } = await supabase.auth.getUser();
 
         if (!authUser) {
           router.replace("/login");
@@ -89,15 +99,35 @@ export default function TeacherDashboardPage() {
         const userName = userProfile?.full_name?.trim();
         setFullName(teacherName || userName || "Teacher");
 
-        // Fetch assigned classes
-        const { data: classes } = await supabase
-          .from("classes")
-          .select("*")
+        // Fetch assigned classes from teaching_assignments
+        const { data: assignments, error } = await supabase
+          .from("teaching_assignments")
+          .select(
+            `
+            id,
+            batch:batches(id, academic_unit, section, course:courses(code, name)),
+            subject:subjects(id, name, code)
+          `,
+          )
           .eq("teacher_id", authUser.id)
-          .order("created_at", { ascending: true });
+          .order("created_at", { ascending: false });
 
-        setAssignedClasses(classes || []);
-        await fetchAttendanceStats(authUser.id, classes || []);
+        if (error) {
+          console.error("Error fetching assignments:", error);
+        }
+
+        const mappedClasses = (assignments || []).map((assignment) => ({
+          id: assignment.id,
+          subject: assignment.subject?.name || "Unknown Subject",
+          course: assignment.batch?.course?.code || "Unknown Course",
+          grade: assignment.batch?.academic_unit || "",
+          section: assignment.batch?.section || "",
+          time: "TBD", // Not currently stored in teaching_assignments
+          room_number: "TBD", // Not currently stored in teaching_assignments
+        }));
+
+        setAssignedClasses(mappedClasses);
+        await fetchAttendanceStats(authUser.id, mappedClasses);
       } catch (error) {
         console.error("Error fetching user:", error);
         router.replace("/login");
@@ -112,7 +142,7 @@ export default function TeacherDashboardPage() {
 
   // Reusing existing stats logic (simplified for brevity if unchanged, but included for completeness)
   const fetchAttendanceStats = async (teacherId, classes) => {
-     try {
+    try {
       const today = new Date().toISOString().split("T")[0];
       const now = new Date();
       const ranges = {
@@ -131,12 +161,14 @@ export default function TeacherDashboardPage() {
         .eq("date", today);
 
       const todayTotal = classes.length;
-      const todayUniqueSubjects = new Set(todayAttendance?.map((a) => a.subject_id).filter(Boolean) || []).size;
+      const todayUniqueSubjects = new Set(
+        todayAttendance?.map((a) => a.subject_id).filter(Boolean) || [],
+      ).size;
       const todaySuccessful = todayUniqueSubjects || 0;
       const todayMissed = Math.max(0, todayTotal - todaySuccessful);
 
       const timePercentages = {};
-      const PERIOD_DURATION = 45; 
+      const PERIOD_DURATION = 45;
 
       for (const [period, startDate] of Object.entries(ranges)) {
         const startDateStr = startDate.toISOString().split("T")[0];
@@ -149,16 +181,26 @@ export default function TeacherDashboardPage() {
         if (attendanceRecords && attendanceRecords.length > 0) {
           const uniqueDays = new Set(attendanceRecords.map((r) => r.date)).size;
           const totalTimeSpent = uniqueDays * PERIOD_DURATION * classes.length;
-          const daysInRange = Math.ceil((now - startDate) / (24 * 60 * 60 * 1000));
+          const daysInRange = Math.ceil(
+            (now - startDate) / (24 * 60 * 60 * 1000),
+          );
           const workingDays = Math.ceil((daysInRange / 7) * 5);
           const expectedTime = workingDays * PERIOD_DURATION * classes.length;
-          timePercentages[period] = expectedTime > 0 ? Math.min(100, Math.round((totalTimeSpent / expectedTime) * 100)) : 0;
+          timePercentages[period] =
+            expectedTime > 0
+              ? Math.min(100, Math.round((totalTimeSpent / expectedTime) * 100))
+              : 0;
         } else {
           timePercentages[period] = 0;
         }
       }
 
-      setAttendanceStats({ todayTotal, todaySuccessful, todayMissed, timePercentages });
+      setAttendanceStats({
+        todayTotal,
+        todaySuccessful,
+        todayMissed,
+        timePercentages,
+      });
     } catch (error) {
       console.error("Error fetching attendance stats:", error);
     }
@@ -186,7 +228,9 @@ export default function TeacherDashboardPage() {
           currentView={currentView}
           onViewChange={setCurrentView}
         />
-        <main className={`flex-1 p-6 transition-all duration-300 ${sidebarCollapsed ? "ml-16" : "ml-0 sm:ml-0"}`}>
+        <main
+          className={`flex-1 p-6 transition-all duration-300 ${sidebarCollapsed ? "ml-16" : "ml-0 sm:ml-0"}`}
+        >
           {/* Header */}
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-8">
             <div className="flex items-center gap-3">
@@ -195,11 +239,15 @@ export default function TeacherDashboardPage() {
               </div>
               <div>
                 <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
-                  {currentView === "dashboard" ? "Teacher Dashboard" : 
-                   currentView.charAt(0).toUpperCase() + currentView.slice(1)}
+                  {currentView === "dashboard"
+                    ? "Teacher Dashboard"
+                    : currentView.charAt(0).toUpperCase() +
+                      currentView.slice(1)}
                 </h1>
                 <p className="text-sm text-gray-500">
-                  {currentView === "dashboard" ? `Welcome back, ${displayName}` : `Manage your ${currentView}`}
+                  {currentView === "dashboard"
+                    ? `Welcome back, ${displayName}`
+                    : `Manage your ${currentView}`}
                 </p>
               </div>
             </div>
@@ -208,7 +256,12 @@ export default function TeacherDashboardPage() {
               <div className="hidden md:flex items-center gap-2 px-4 py-2 bg-white rounded-lg shadow-sm border border-gray-200">
                 <Clock className="w-4 h-4 text-purple-600" />
                 <span className="text-sm font-medium text-gray-700">
-                  {new Date().toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "short", day: "numeric" })}
+                  {new Date().toLocaleDateString("en-US", {
+                    weekday: "long",
+                    year: "numeric",
+                    month: "short",
+                    day: "numeric",
+                  })}
                 </span>
               </div>
               <NotificationBell userRole="teacher" userId={userId} />
@@ -225,49 +278,60 @@ export default function TeacherDashboardPage() {
 
           {/* Main Content Area */}
           <div className="space-y-6">
-            
             {currentView === "dashboard" && (
               <>
                 {/* Stats Grid */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                   <Card className="hover:shadow-lg transition-shadow border-l-4 border-l-blue-500">
-                     <CardContent className="p-6">
-                       <div className="flex justify-between items-start">
-                         <div>
-                           <p className="text-sm font-medium text-gray-500">Total Classes Today</p>
-                           <h3 className="text-3xl font-bold text-gray-900 mt-2">{attendanceStats.todayTotal}</h3>
-                         </div>
-                         <div className="p-3 bg-blue-50 rounded-lg">
-                           <Calendar className="w-6 h-6 text-blue-600" />
-                         </div>
-                       </div>
-                     </CardContent>
+                    <CardContent className="p-6">
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <p className="text-sm font-medium text-gray-500">
+                            Total Classes Today
+                          </p>
+                          <h3 className="text-3xl font-bold text-gray-900 mt-2">
+                            {attendanceStats.todayTotal}
+                          </h3>
+                        </div>
+                        <div className="p-3 bg-blue-50 rounded-lg">
+                          <Calendar className="w-6 h-6 text-blue-600" />
+                        </div>
+                      </div>
+                    </CardContent>
                   </Card>
-                   <Card className="hover:shadow-lg transition-shadow border-l-4 border-l-green-500">
-                     <CardContent className="p-6">
-                       <div className="flex justify-between items-start">
-                         <div>
-                           <p className="text-sm font-medium text-gray-500">Classes Completed</p>
-                           <h3 className="text-3xl font-bold text-gray-900 mt-2">{attendanceStats.todaySuccessful}</h3>
-                         </div>
-                         <div className="p-3 bg-green-50 rounded-lg">
-                           <CheckCircle className="w-6 h-6 text-green-600" />
-                         </div>
-                       </div>
-                     </CardContent>
+                  <Card className="hover:shadow-lg transition-shadow border-l-4 border-l-green-500">
+                    <CardContent className="p-6">
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <p className="text-sm font-medium text-gray-500">
+                            Classes Completed
+                          </p>
+                          <h3 className="text-3xl font-bold text-gray-900 mt-2">
+                            {attendanceStats.todaySuccessful}
+                          </h3>
+                        </div>
+                        <div className="p-3 bg-green-50 rounded-lg">
+                          <CheckCircle className="w-6 h-6 text-green-600" />
+                        </div>
+                      </div>
+                    </CardContent>
                   </Card>
-                   <Card className="hover:shadow-lg transition-shadow border-l-4 border-l-orange-500">
-                     <CardContent className="p-6">
-                       <div className="flex justify-between items-start">
-                         <div>
-                           <p className="text-sm font-medium text-gray-500">Classes Pending</p>
-                           <h3 className="text-3xl font-bold text-gray-900 mt-2">{attendanceStats.todayMissed}</h3>
-                         </div>
-                         <div className="p-3 bg-orange-50 rounded-lg">
-                           <AlertCircle className="w-6 h-6 text-orange-600" />
-                         </div>
-                       </div>
-                     </CardContent>
+                  <Card className="hover:shadow-lg transition-shadow border-l-4 border-l-orange-500">
+                    <CardContent className="p-6">
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <p className="text-sm font-medium text-gray-500">
+                            Classes Pending
+                          </p>
+                          <h3 className="text-3xl font-bold text-gray-900 mt-2">
+                            {attendanceStats.todayMissed}
+                          </h3>
+                        </div>
+                        <div className="p-3 bg-orange-50 rounded-lg">
+                          <AlertCircle className="w-6 h-6 text-orange-600" />
+                        </div>
+                      </div>
+                    </CardContent>
                   </Card>
                 </div>
 
@@ -280,27 +344,50 @@ export default function TeacherDashboardPage() {
                         Today's Schedule / Assigned Classes
                       </CardTitle>
                     </CardHeader>
-                     <CardContent>
+                    <CardContent>
                       <div className="overflow-x-auto">
                         <table className="min-w-full text-sm">
                           <thead className="bg-gray-50">
                             <tr>
-                              <th className="px-4 py-3 text-left font-medium text-gray-500">Subject</th>
-                              <th className="px-4 py-3 text-left font-medium text-gray-500">Class</th>
-                              <th className="px-4 py-3 text-left font-medium text-gray-500">Time</th>
-                              <th className="px-4 py-3 text-left font-medium text-gray-500">Room</th>
+                              <th className="px-4 py-3 text-left font-medium text-gray-500">
+                                Subject
+                              </th>
+                              <th className="px-4 py-3 text-left font-medium text-gray-500">
+                                Class
+                              </th>
+                              <th className="px-4 py-3 text-left font-medium text-gray-500">
+                                Time
+                              </th>
+                              <th className="px-4 py-3 text-left font-medium text-gray-500">
+                                Room
+                              </th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-gray-100">
                             {assignedClasses.length === 0 ? (
-                               <tr><td colSpan="4" className="text-center py-4 text-gray-500">No classes assigned.</td></tr>
+                              <tr>
+                                <td
+                                  colSpan="4"
+                                  className="text-center py-4 text-gray-500"
+                                >
+                                  No classes assigned.
+                                </td>
+                              </tr>
                             ) : (
                               assignedClasses.map((cls) => (
                                 <tr key={cls.id} className="hover:bg-gray-50">
-                                  <td className="px-4 py-3 font-medium text-gray-900">{cls.subject}</td>
-                                  <td className="px-4 py-3 text-gray-600">{cls.course || cls.grade} ({cls.section})</td>
-                                  <td className="px-4 py-3 text-gray-600">{cls.time || "TBD"}</td>
-                                  <td className="px-4 py-3 text-gray-600">{cls.room_number || "TBD"}</td>
+                                  <td className="px-4 py-3 font-medium text-gray-900">
+                                    {cls.subject}
+                                  </td>
+                                  <td className="px-4 py-3 text-gray-600">
+                                    {cls.course || cls.grade} ({cls.section})
+                                  </td>
+                                  <td className="px-4 py-3 text-gray-600">
+                                    {cls.time || "TBD"}
+                                  </td>
+                                  <td className="px-4 py-3 text-gray-600">
+                                    {cls.room_number || "TBD"}
+                                  </td>
                                 </tr>
                               ))
                             )}
@@ -320,7 +407,7 @@ export default function TeacherDashboardPage() {
                         </CardTitle>
                       </CardHeader>
                       <CardContent className="max-h-[400px] overflow-y-auto">
-                         <NoticesBoard role="teacher" />
+                        <NoticesBoard role="teacher" />
                       </CardContent>
                     </Card>
                   </div>
@@ -328,25 +415,32 @@ export default function TeacherDashboardPage() {
               </>
             )}
 
-            {currentView === "attendance" && <AttendanceManager teacherId={userId} />}
-            
+            {currentView === "attendance" && (
+              <AttendanceManager teacherId={userId} />
+            )}
+
             {currentView === "marks" && <MarksSection teacherId={userId} />}
 
-            {currentView === "assignments" && <AssignmentsManager teacherId={userId} />}
+            {currentView === "assignments" && (
+              <AssignmentsManager teacherId={userId} />
+            )}
 
-            {currentView === "performance" && <StudentPerformance teacherId={userId} />}
+            {currentView === "performance" && (
+              <StudentPerformance teacherId={userId} />
+            )}
 
             {currentView === "notices" && <NoticesBoard role="teacher" />}
 
             {currentView === "profile" && (
-              <TeacherProfile 
-                user={user} 
-                profile={profile} 
-                teacherRecord={teacherRecord} 
-                onChangePassword={() => alert("Password change handled in profile settings.")} 
+              <TeacherProfile
+                user={user}
+                profile={profile}
+                teacherRecord={teacherRecord}
+                onChangePassword={() =>
+                  alert("Password change handled in profile settings.")
+                }
               />
             )}
-
           </div>
         </main>
       </div>
