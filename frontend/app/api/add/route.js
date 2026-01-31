@@ -111,15 +111,18 @@ export async function POST(req) {
 
       if (teacherError) {
         console.error("Teachers table insert error:", teacherError);
-        // Note: User exists in 'users' and 'auth', but not 'teachers'.
-        // Admin might need to fix manually or we can fail harder.
-        // For now, returning warning.
+
+        // Rollback
+        await supabase.from("users").delete().eq("id", userId);
+        await supabase.auth.admin.deleteUser(userId);
+
         return NextResponse.json(
           {
-            message: "User created, but failed to add to teachers table.",
+            error:
+              "Failed to add to teachers table. User creation rolled back.",
             details: teacherError.message,
           },
-          { status: 207 }, // Multi-status / Partial success
+          { status: 500 },
         );
       }
     } else if (role === "student") {
@@ -144,16 +147,21 @@ export async function POST(req) {
 
       if (studentError) {
         console.error("Students table insert error:", studentError);
+
+        // Rollback
+        await supabase.from("users").delete().eq("id", userId);
+        await supabase.auth.admin.deleteUser(userId);
+
         return NextResponse.json(
           {
-            message: "User created, but failed to link student details.",
+            error: "Failed to link student details. User creation rolled back.",
             details: studentError.message,
             code: studentError.code,
             hint:
               studentError.hint ||
               "Check for unique constraints (reg_no, phone) or invalid batch_id.",
           },
-          { status: 207 },
+          { status: 500 },
         );
       }
 

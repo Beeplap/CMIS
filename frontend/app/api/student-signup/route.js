@@ -137,10 +137,17 @@ export async function POST(req) {
 
     if (studentError) {
       console.error("Student insert error", studentError);
-      // Warning: user created but student entry failed.
-      // Ideally rollback here too, but for now just reporting error.
+
+      // Rollback: Delete from public.users and auth.users
+      await supabase.from("users").delete().eq("id", userId);
+      await supabase.auth.admin.deleteUser(userId);
+
       return NextResponse.json(
-        { error: "User created but failed to link student details." },
+        {
+          error:
+            "Failed to link student details. Account creation rolled back.",
+          details: studentError.message,
+        },
         { status: 500 },
       );
     }

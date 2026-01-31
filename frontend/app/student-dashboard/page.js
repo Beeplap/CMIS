@@ -132,7 +132,7 @@ export default function StudentDashboardPage() {
                     Welcome back, {displayName}!
                   </h1>
                   <p className="opacity-90">
-                    Batch: {batchInfo} | Reg.No: {studentData?.roll || "N/A"}
+                    Batch: {batchInfo} | Reg.No: {studentData?.reg_no || "N/A"}
                   </p>
                 </div>
                 <div className="bg-white/20 p-4 rounded-xl backdrop-blur-sm">
