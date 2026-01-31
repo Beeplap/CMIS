@@ -131,7 +131,7 @@ export default function SignupPage() {
               value={formData.registrationNumber}
               onChange={handleChange}
               className="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-purple-500 outline-none transition-all"
-              placeholder="e.g. 6-2-1055-126-2023"
+              placeholder="e.g. 6-2-1055-***-2023"
             />
           </div>
 

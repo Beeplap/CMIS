@@ -800,7 +800,7 @@ export default function AdminPage() {
       {/* Modals */}
       {/* Modals */}
       <AddUser
-        isOpen={showAddUser}
+        open={showAddUser}
         onClose={() => setShowAddUser(false)}
         onUserAdded={fetchAllData}
         userType={addUserRole}

@@ -13,6 +13,7 @@ export async function POST(req) {
       role,
       // Student specific
       gender,
+      reg_no,
       class: studentClass,
       section,
       phone_number,
@@ -126,8 +127,8 @@ export async function POST(req) {
       // Roll is initially NULL or temp, will be fixed by recalculateBatchRolls immediately
       const { error: studentError } = await supabase.from("students").insert({
         id: userId,
-        roll: null, // Will be assigned alphabetically below
-        reg_no: null, // As per requirements: Admin skips this, nullable in DB
+        roll: null, // Will be assigned alphabetically below via recalculateBatchRolls
+        reg_no: reg_no || null,
         full_name,
         batch_id: body.batch_id,
         gender,
@@ -145,8 +146,12 @@ export async function POST(req) {
         console.error("Students table insert error:", studentError);
         return NextResponse.json(
           {
-            message: "User created, but failed to add to students table.",
+            message: "User created, but failed to link student details.",
             details: studentError.message,
+            code: studentError.code,
+            hint:
+              studentError.hint ||
+              "Check for unique constraints (reg_no, phone) or invalid batch_id.",
           },
           { status: 207 },
         );

@@ -20,6 +20,7 @@ export default function AddUser({
 
   // Student-specific fields
   const [gender, setGender] = useState("");
+  const [registrationNumber, setRegistrationNumber] = useState("");
   const [selectedBatchId, setSelectedBatchId] = useState("");
   const [batches, setBatches] = useState([]);
   const [phoneNumber, setPhoneNumber] = useState("");
@@ -36,6 +37,7 @@ export default function AddUser({
       setNewRole(defaultRole);
       // Reset student-specific fields when opening
       setGender("");
+      setRegistrationNumber("");
       setSelectedBatchId("");
       setPhoneNumber("");
       setGuardianName("");
@@ -88,6 +90,7 @@ export default function AddUser({
       // Add student-specific fields
       if (newRole === "student") {
         requestBody.gender = gender;
+        requestBody.reg_no = registrationNumber;
         requestBody.batch_id = selectedBatchId;
         requestBody.phone_number = phoneNumber;
         requestBody.guardian_name = guardianName;
@@ -116,6 +119,7 @@ export default function AddUser({
       setNewFullName("");
       setNewRole("teacher");
       setGender("");
+      setRegistrationNumber("");
       setSelectedBatchId("");
       setPhoneNumber("");
       setGuardianName("");
@@ -257,6 +261,19 @@ export default function AddUser({
                           </option>
                         ))}
                       </select>
+                    </div>
+
+                    <div className="sm:col-span-2">
+                      <label className="block text-sm font-medium mb-1">
+                        Registration Number
+                      </label>
+                      <input
+                        type="text"
+                        value={registrationNumber}
+                        onChange={(e) => setRegistrationNumber(e.target.value)}
+                        className="w-full border rounded-md px-3 py-2 bg-white/80 dark:bg-black/20"
+                        placeholder="e.g. 6-2-1055-***-2023"
+                      />
                     </div>
 
                     <div className="sm:col-span-2">
