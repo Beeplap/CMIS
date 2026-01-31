@@ -10,8 +10,7 @@ export default function RootLayout({ children }) {
   return (
     <html lang="en">
       <body className="antialiased">
-        <SupabaseHealthCheck />
-        {children}
+        <SupabaseHealthCheck>{children}</SupabaseHealthCheck>
       </body>
     </html>
   );
