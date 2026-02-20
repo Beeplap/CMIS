@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import Sidebar from "@/components/ui/Sidebar";
@@ -23,14 +23,18 @@ import {
   XCircle,
   Clock,
   Menu,
+  RefreshCw,
+  AlertTriangle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import AddUser from "@/components/ui/addUser";
 import ManageCurriculum from "@/components/ui/ManageCurriculum";
 import ManageBatches from "@/components/dashboard/ManageBatches";
 import AssignTeacher from "@/components/dashboard/AssignTeacher";
+import StudentAttendanceView from "@/components/dashboard/StudentAttendanceView";
 
 export default function AdminPage() {
   const router = useRouter();
@@ -48,6 +52,13 @@ export default function AdminPage() {
   const [subjects, setSubjects] = useState([]);
   const [notices, setNotices] = useState([]);
   const [fees, setFees] = useState([]);
+  const [attendanceStats, setAttendanceStats] = useState({
+    overallPercentage: 0,
+    todayTotal: 0,
+    todayPresent: 0,
+    weeklyData: [],
+    batchBreakdown: [],
+  });
 
   // Modal States
   const [showAddUser, setShowAddUser] = useState(false);
@@ -102,7 +113,7 @@ export default function AdminPage() {
     // Fetch Batches
     const { data: batchesData } = await supabase
       .from("batches")
-      .select("*, course:courses(code)")
+      .select("*, course:courses(code, name)")
       .eq("is_active", true);
     if (batchesData) setBatches(batchesData);
 
@@ -122,6 +133,138 @@ export default function AdminPage() {
     if (feesData) {
       // Transform for display if needed
       setFees(feesData);
+    }
+
+    // Fetch Attendance Statistics
+    await fetchAttendanceStats();
+  };
+
+  const fetchAttendanceStats = async () => {
+    try {
+      const today = new Date().toISOString().split("T")[0];
+      const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
+        .toISOString()
+        .split("T")[0];
+
+      // 1. Overall attendance percentage (all time)
+      const { data: allAttendance } = await supabase
+        .from("attendance")
+        .select("status");
+
+      if (allAttendance && allAttendance.length > 0) {
+        const total = allAttendance.length;
+        const present = allAttendance.filter(
+          (r) => r.status === "present",
+        ).length;
+        const overallPercentage =
+          total > 0 ? Math.round((present / total) * 100) : 0;
+
+        // 2. Today's attendance
+        const { data: todayAttendance } = await supabase
+          .from("attendance")
+          .select("status, student_id")
+          .eq("date", today);
+
+        const todayUnique = new Set(
+          todayAttendance?.map((r) => r.student_id) || [],
+        ).size;
+        const todayPresent = todayAttendance?.filter(
+          (r) => r.status === "present",
+        ).length || 0;
+
+        // 3. Weekly trend (last 7 days)
+        const { data: weeklyData } = await supabase
+          .from("attendance")
+          .select("date, status, student_id")
+          .gte("date", weekAgo)
+          .order("date", { ascending: true });
+
+        const weeklyMap = {};
+        weeklyData?.forEach((record) => {
+          const date = record.date;
+          if (!weeklyMap[date]) {
+            weeklyMap[date] = { total: 0, present: 0 };
+          }
+          weeklyMap[date].total++;
+          if (record.status === "present") {
+            weeklyMap[date].present++;
+          }
+        });
+
+        const weeklyTrend = Object.entries(weeklyMap)
+          .map(([date, stats]) => ({
+            date,
+            percentage:
+              stats.total > 0
+                ? Math.round((stats.present / stats.total) * 100)
+                : 0,
+            present: stats.present,
+            total: stats.total,
+          }))
+          .sort((a, b) => a.date.localeCompare(b.date));
+
+        // 4. Batch-wise breakdown (aggregate by batch_id from students)
+        const batchMap = {};
+        const studentBatchMap = {};
+        
+        // Get student -> batch mapping
+        const { data: studentBatches } = await supabase
+          .from("students")
+          .select("id, batch_id, batch:batches(id, academic_unit, section, course:courses(code, name))")
+          .not("batch_id", "is", null);
+
+        studentBatches?.forEach((s) => {
+          if (s.batch_id && s.batch) {
+            studentBatchMap[s.id] = s.batch;
+          }
+        });
+
+        // Aggregate attendance by batch using weeklyData
+        weeklyData?.forEach((record) => {
+          const batch = studentBatchMap[record.student_id];
+          if (!batch) return;
+          
+          const batchId = batch.id;
+          if (!batchMap[batchId]) {
+            batchMap[batchId] = {
+              batch: batch,
+              total: 0,
+              present: 0,
+            };
+          }
+          batchMap[batchId].total++;
+          if (record.status === "present") {
+            batchMap[batchId].present++;
+          }
+        });
+
+        const batchBreakdown = Object.values(batchMap)
+          .map((b) => ({
+            ...b,
+            percentage:
+              b.total > 0 ? Math.round((b.present / b.total) * 100) : 0,
+          }))
+          .sort((a, b) => b.percentage - a.percentage)
+          .slice(0, 5); // Top 5 batches
+
+        setAttendanceStats({
+          overallPercentage,
+          todayTotal: todayUnique,
+          todayPresent,
+          weeklyData: weeklyTrend,
+          batchBreakdown,
+        });
+      } else {
+        setAttendanceStats({
+          overallPercentage: 0,
+          todayTotal: 0,
+          todayPresent: 0,
+          weeklyData: [],
+          batchBreakdown: [],
+        });
+      }
+    } catch (error) {
+      console.error("Error fetching attendance stats:", error);
     }
   };
 
@@ -201,7 +344,7 @@ export default function AdminPage() {
         />
         <StatsCard
           title="Avg Attendance"
-          value="85%"
+          value={`${attendanceStats.overallPercentage}%`}
           icon={Clock}
           color="text-orange-600"
           bg="bg-orange-100"
@@ -211,10 +354,68 @@ export default function AdminPage() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card>
           <CardHeader>
-            <CardTitle>Attendance Summary</CardTitle>
+            <CardTitle className="flex items-center justify-between">
+              <span>Attendance Summary</span>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={fetchAttendanceStats}
+                className="text-xs"
+              >
+                Refresh
+              </Button>
+            </CardTitle>
           </CardHeader>
-          <CardContent className="h-64 flex items-center justify-center bg-gray-50 border-dashed border-2 rounded-lg">
-            <p className="text-gray-500">Attendance Chart Placeholder</p>
+          <CardContent>
+            {attendanceStats.weeklyData.length > 0 ? (
+              <div className="space-y-4">
+                <div className="flex items-end justify-between gap-2 h-48">
+                  {attendanceStats.weeklyData.map((day, idx) => (
+                    <div
+                      key={day.date}
+                      className="flex-1 flex flex-col items-center gap-1"
+                    >
+                      <div className="w-full flex flex-col justify-end h-40 bg-gray-100 rounded-t overflow-hidden">
+                        <div
+                          className={`w-full transition-all ${
+                            day.percentage >= 75
+                              ? "bg-green-500"
+                              : day.percentage >= 50
+                                ? "bg-yellow-500"
+                                : "bg-red-500"
+                          }`}
+                          style={{ height: `${day.percentage}%` }}
+                        />
+                      </div>
+                      <div className="text-xs text-gray-600 font-medium mt-1">
+                        {day.percentage}%
+                      </div>
+                      <div className="text-[10px] text-gray-500 mt-1">
+                        {new Date(day.date).toLocaleDateString("en-US", {
+                          month: "short",
+                          day: "numeric",
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div className="pt-2 border-t text-xs text-gray-500">
+                  <div className="flex items-center justify-between">
+                    <span>
+                      Today: {attendanceStats.todayPresent} /{" "}
+                      {attendanceStats.todayTotal} present
+                    </span>
+                    <span className="font-medium text-gray-700">
+                      Last 7 Days
+                    </span>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="h-64 flex items-center justify-center bg-gray-50 border-dashed border-2 rounded-lg">
+                <p className="text-gray-500">No attendance data available</p>
+              </div>
+            )}
           </CardContent>
         </Card>
         <Card>
@@ -454,134 +655,603 @@ export default function AdminPage() {
   const [attendanceDate, setAttendanceDate] = useState(
     new Date().toISOString().split("T")[0],
   );
+  const [selectedSubject, setSelectedSubject] = useState("all");
+  const [selectedMonth, setSelectedMonth] = useState(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  });
+  const [attendanceViewMode, setAttendanceViewMode] = useState("batch"); // "batch" | "student"
+  const [selectedStudentIdForAttendance, setSelectedStudentIdForAttendance] = useState("");
+  const [studentAttendanceSearch, setStudentAttendanceSearch] = useState("");
 
-  const fetchAttendance = async (classId, date) => {
-    if (!classId) return;
-    setLoading(true);
-    // Assuming attendance table has: class_id, date, status, student_id (FK), etc.
-    // Adjust structure based on actual table. Using a generic guess based on previous files.
-    const { data, error } = await supabase
-      .from("attendance")
-      .select(
-        `
-            *,
-            students:student_id (full_name, roll)
-        `,
-      )
-      .eq("class_id", classId) // Adjust if column name is different
-      .eq("date", date);
-
-    if (data) setAttendanceRecords(data);
-    if (error) {
-      // Fallback if class_id is not the column, maybe it's linked via subject?
-      // For now, assuming direct link or we just show a message.
-      console.error("Attendance fetch error", error);
+  const fetchAttendance = async (batchId, date = null) => {
+    if (!batchId) {
+      setAttendanceRecords([]);
+      return;
     }
-    setLoading(false);
+    setLoading(true);
+    try {
+      // Find teaching_assignments for this batch
+      const { data: teachingAssignments } = await supabase
+        .from("teaching_assignments")
+        .select("id")
+        .eq("batch_id", batchId);
+
+      const teachingIds = teachingAssignments?.map((ta) => ta.id) || [];
+
+      if (teachingIds.length === 0) {
+        setAttendanceRecords([]);
+        setLoading(false);
+        return;
+      }
+
+      // Build query - fetch all records for the batch (date filter handled on frontend)
+      let query = supabase
+        .from("attendance")
+        .select(
+          `
+            *,
+            students:student_id (full_name, roll),
+            subject:subjects(id, name, code)
+          `,
+        )
+        .in("class_id", teachingIds);
+
+      // Optionally filter by date if provided (for backward compatibility)
+      if (date) {
+        query = query.eq("date", date);
+      }
+
+      const { data, error } = await query.order("date", { ascending: false });
+
+      if (error) {
+        console.error("Attendance fetch error", error);
+        setAttendanceRecords([]);
+      } else {
+        setAttendanceRecords(data || []);
+      }
+    } catch (err) {
+      console.error("Error fetching attendance:", err);
+      setAttendanceRecords([]);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const renderAttendance = () => (
-    <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
-      <h2 className="text-2xl font-bold">Attendance Monitoring</h2>
-      <div className="flex gap-4">
-        <select
-          className="border p-2 rounded-md w-40"
-          value={selectedAttendanceClass}
-          onChange={(e) => {
-            setSelectedAttendanceClass(e.target.value);
-            fetchAttendance(e.target.value, attendanceDate);
-          }}
-        >
-          <option value="">Select Batch</option>
-          {batches.map((b) => (
-            <option key={b.id} value={b.id}>
-              {b.course?.code} {b.academic_unit}{" "}
-              {b.section ? `(${b.section})` : ""}
-            </option>
-          ))}
-        </select>
-        <input
-          type="date"
-          className="border p-2 rounded-md"
-          value={attendanceDate}
-          onChange={(e) => {
-            setAttendanceDate(e.target.value);
-            if (selectedAttendanceClass)
-              fetchAttendance(selectedAttendanceClass, e.target.value);
-          }}
-        />
-        <Button
-          onClick={() =>
-            fetchAttendance(selectedAttendanceClass, attendanceDate)
-          }
-        >
-          Refresh
-        </Button>
+  // Calculate available subjects (at component level)
+  const availableSubjects = useMemo(() => {
+    const subjectsMap = new Map();
+    attendanceRecords.forEach((record) => {
+      if (record.subject?.id) {
+        subjectsMap.set(record.subject.id, {
+          id: record.subject.id,
+          name: record.subject.name || "Unknown",
+          code: record.subject.code || "",
+        });
+      }
+    });
+    return Array.from(subjectsMap.values());
+  }, [attendanceRecords]);
+
+  // Filter attendance by subject and month (at component level)
+  const filteredRecords = useMemo(() => {
+    let filtered = [...attendanceRecords];
+
+    // Filter by month
+    if (selectedMonth) {
+      const [year, month] = selectedMonth.split("-").map(Number);
+      filtered = filtered.filter((record) => {
+        const recordDate = new Date(record.date);
+        return (
+          recordDate.getFullYear() === year &&
+          recordDate.getMonth() + 1 === month
+        );
+      });
+    }
+
+    // Filter by subject
+    if (selectedSubject !== "all") {
+      filtered = filtered.filter(
+        (record) => record.subject?.id === selectedSubject,
+      );
+    }
+
+    return filtered;
+  }, [attendanceRecords, selectedSubject, selectedMonth]);
+
+  // Calculate stats for filtered data (at component level)
+  const attendanceStatsFiltered = useMemo(() => {
+    const total = filteredRecords.length;
+    const present = filteredRecords.filter(
+      (r) => r.status === "present",
+    ).length;
+    const absent = filteredRecords.filter(
+      (r) => r.status === "absent",
+    ).length;
+    const leave = filteredRecords.filter(
+      (r) => r.status === "late",
+    ).length;
+    const percentage = total > 0 ? Math.round((present / total) * 100) : 0;
+
+    return { total, present, absent, leave, percentage };
+  }, [filteredRecords]);
+
+  // Filtered students for individual attendance selector (search by name or roll)
+  const studentsForAttendanceSelector = useMemo(() => {
+    if (!studentAttendanceSearch.trim()) return students.slice(0, 100);
+    const q = studentAttendanceSearch.toLowerCase().trim();
+    return students.filter(
+      (s) =>
+        (s.full_name || "").toLowerCase().includes(q) ||
+        (s.roll || "").toLowerCase().includes(q),
+    );
+  }, [students, studentAttendanceSearch]);
+
+  const renderAttendance = () => {
+    return (
+      <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+        {/* View Mode Toggle: By Batch | By Student */}
+        <div className="flex flex-wrap items-center gap-4">
+          <Tabs
+            value={attendanceViewMode}
+            onValueChange={(v) => {
+              setAttendanceViewMode(v);
+              if (v === "batch") setSelectedStudentIdForAttendance("");
+            }}
+          >
+            <TabsList className="h-11">
+              <TabsTrigger value="batch" className="px-4">
+                By Batch
+              </TabsTrigger>
+              <TabsTrigger value="student" className="px-4">
+                By Student
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
+        </div>
+
+        {/* Individual Student Attendance View (same UI as student dashboard) */}
+        {attendanceViewMode === "student" && (
+          <Card className="shadow-sm">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-xl">
+                <UserCheck className="w-5 h-5 text-purple-600" />
+                View Attendance for a Student
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex flex-col sm:flex-row gap-3">
+                <div className="relative flex-1">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                  <Input
+                    placeholder="Search by name or roll..."
+                    className="pl-9"
+                    value={studentAttendanceSearch}
+                    onChange={(e) => setStudentAttendanceSearch(e.target.value)}
+                  />
+                </div>
+                <select
+                  className="min-w-[260px] p-2 border rounded-md bg-white"
+                  value={selectedStudentIdForAttendance}
+                  onChange={(e) => setSelectedStudentIdForAttendance(e.target.value)}
+                >
+                  <option value="">Select a student</option>
+                  {studentsForAttendanceSelector.map((s) => {
+                    const batchLabel = batches.find((b) => b.id === s.batch_id);
+                    const label = batchLabel
+                      ? `${batchLabel.course?.code || "?"} Sem-${batchLabel.academic_unit}`
+                      : "No batch";
+                    return (
+                      <option key={s.id} value={s.id}>
+                        {s.full_name || "Unknown"} — {s.roll || "-"} ({label})
+                      </option>
+                    );
+                  })}
+                </select>
+                {selectedStudentIdForAttendance && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setSelectedStudentIdForAttendance("");
+                      setStudentAttendanceSearch("");
+                    }}
+                  >
+                    Clear
+                  </Button>
+                )}
+              </div>
+              {selectedStudentIdForAttendance ? (
+                <div className="rounded-lg border bg-gray-50/50 p-4">
+                  <StudentAttendanceView studentId={selectedStudentIdForAttendance} />
+                </div>
+              ) : (
+                <div className="text-center py-12 text-gray-500 border-2 border-dashed rounded-lg bg-gray-50/50">
+                  <UserCheck className="w-12 h-12 mx-auto mb-3 opacity-30" />
+                  <p className="text-sm">Select a student to view their attendance (same view as student dashboard).</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        {/* By Batch: Overview Stats (only when in batch mode) */}
+        {attendanceViewMode === "batch" && (
+          <>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <Card className="bg-gradient-to-br from-purple-50 to-purple-100 border-purple-200 hover:shadow-md transition-shadow">
+            <CardContent className="p-6 flex flex-col items-center justify-center">
+              <p className="text-sm font-medium text-purple-700 mb-1">
+                Overall Attendance
+              </p>
+              <p className="text-4xl font-bold text-gray-900 mt-2">
+                {attendanceStats.overallPercentage}%
+              </p>
+              {attendanceStats.overallPercentage > 0 && attendanceStats.overallPercentage < 75 && (
+                <span className="mt-3 inline-flex items-center px-3 py-1 rounded-full text-xs font-bold bg-red-100 text-red-700">
+                  <AlertTriangle className="w-3 h-3 mr-1" /> Below 75%
+                </span>
+              )}
+            </CardContent>
+          </Card>
+          <Card className="hover:shadow-md transition-shadow">
+            <CardContent className="p-6 flex flex-col items-center justify-center">
+              <p className="text-sm font-medium text-gray-500 mb-1">
+                Today Total
+              </p>
+              <p className="text-3xl font-bold text-gray-900 mt-2">
+                {attendanceStats.todayTotal}
+              </p>
+              <p className="text-xs text-gray-400 mt-1">Marked today</p>
+            </CardContent>
+          </Card>
+          <Card className="hover:shadow-md transition-shadow">
+            <CardContent className="p-6 flex flex-col items-center justify-center">
+              <p className="text-sm font-medium text-green-600 mb-1">
+                Today Present
+              </p>
+              <p className="text-3xl font-bold text-gray-900 mt-2">
+                {attendanceStats.todayPresent}
+              </p>
+              <p className="text-xs text-gray-400 mt-1">
+                Absent: {attendanceStats.todayTotal - attendanceStats.todayPresent}
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Batch Breakdown */}
+        {attendanceStats.batchBreakdown.length > 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Top Batches by Attendance (Last 7 Days)</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                {attendanceStats.batchBreakdown.map((batch, idx) => (
+                  <div key={idx} className="space-y-1">
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="font-medium text-gray-700">
+                        {batch.batch?.course?.code || "Unknown"} Sem-
+                        {batch.batch?.academic_unit || "N/A"}
+                        {batch.batch?.section
+                          ? ` (${batch.batch.section})`
+                          : ""}
+                      </span>
+                      <span className="font-bold text-gray-900">
+                        {batch.percentage}%
+                      </span>
+                    </div>
+                    <div className="w-full h-2 bg-gray-200 rounded-full overflow-hidden">
+                      <div
+                        className={`h-full transition-all ${
+                          batch.percentage >= 75
+                            ? "bg-green-500"
+                            : batch.percentage >= 50
+                              ? "bg-yellow-500"
+                              : "bg-red-500"
+                        }`}
+                        style={{ width: `${batch.percentage}%` }}
+                      />
+                    </div>
+                    <div className="text-xs text-gray-500">
+                      {batch.present} present / {batch.total} total
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Detailed View with Subject Tabs */}
+        <Card className="shadow-sm">
+          <CardHeader className="pb-4">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <CardTitle className="flex items-center gap-2 text-xl">
+                <Calendar className="w-5 h-5 text-purple-600" />
+                Attendance Records
+              </CardTitle>
+              <div className="flex flex-col sm:flex-row gap-3">
+                {/* Month Filter */}
+                <div className="flex items-center gap-2">
+                  <label
+                    htmlFor="month-filter-admin"
+                    className="text-sm font-medium text-gray-700 whitespace-nowrap"
+                  >
+                    Filter by Month:
+                  </label>
+                  <input
+                    id="month-filter-admin"
+                    type="month"
+                    value={selectedMonth}
+                    onChange={(e) => setSelectedMonth(e.target.value)}
+                    className="px-3 py-1.5 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  />
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    if (selectedAttendanceClass) {
+                      fetchAttendance(selectedAttendanceClass);
+                    }
+                  }}
+                  className="whitespace-nowrap"
+                  disabled={!selectedAttendanceClass}
+                >
+                  <RefreshCw className="w-4 h-4 mr-2" />
+                  Refresh
+                </Button>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {/* Batch Selector */}
+            <div className="mb-6">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Select Batch
+              </label>
+              <select
+                className="w-full sm:w-auto min-w-[250px] p-2 border rounded-md"
+                value={selectedAttendanceClass}
+                onChange={(e) => {
+                  setSelectedAttendanceClass(e.target.value);
+                  setSelectedSubject("all"); // Reset subject when batch changes
+                  if (e.target.value) {
+                    // Fetch all records for the batch (no date filter)
+                    fetchAttendance(e.target.value);
+                  }
+                }}
+              >
+                <option value="">Select Batch</option>
+                {batches.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.course?.code || "Unknown"} Sem-{b.academic_unit}{" "}
+                    {b.section ? `(${b.section})` : ""}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Subject Tabs */}
+            {availableSubjects.length > 0 && selectedAttendanceClass && (
+              <Tabs value={selectedSubject} onValueChange={setSelectedSubject}>
+                <div className="mb-6">
+                  <TabsList className="w-full sm:w-auto">
+                    <TabsTrigger value="all">All Subjects</TabsTrigger>
+                    {availableSubjects.map((subject) => (
+                      <TabsTrigger key={subject.id} value={subject.id}>
+                        {subject.name}
+                      </TabsTrigger>
+                    ))}
+                  </TabsList>
+                </div>
+
+                {/* Per-Subject Stats (shown when a specific subject is selected) */}
+                {selectedSubject !== "all" && (
+                  <div className="mb-6 grid grid-cols-2 md:grid-cols-5 gap-4">
+                    <div className="bg-blue-50 rounded-lg p-4 border border-blue-100">
+                      <p className="text-xs font-medium text-blue-600 mb-1">
+                        Total Classes
+                      </p>
+                      <p className="text-2xl font-bold text-gray-900">
+                        {attendanceStatsFiltered.total}
+                      </p>
+                    </div>
+                    <div className="bg-green-50 rounded-lg p-4 border border-green-100">
+                      <p className="text-xs font-medium text-green-600 mb-1">
+                        Present
+                      </p>
+                      <p className="text-2xl font-bold text-gray-900">
+                        {attendanceStatsFiltered.present}
+                      </p>
+                    </div>
+                    <div className="bg-red-50 rounded-lg p-4 border border-red-100">
+                      <p className="text-xs font-medium text-red-600 mb-1">
+                        Absent
+                      </p>
+                      <p className="text-2xl font-bold text-gray-900">
+                        {attendanceStatsFiltered.absent}
+                      </p>
+                    </div>
+                    <div className="bg-yellow-50 rounded-lg p-4 border border-yellow-100">
+                      <p className="text-xs font-medium text-yellow-600 mb-1">
+                        On Leave
+                      </p>
+                      <p className="text-2xl font-bold text-gray-900">
+                        {attendanceStatsFiltered.leave}
+                      </p>
+                    </div>
+                    <div className="bg-purple-50 rounded-lg p-4 border border-purple-100">
+                      <p className="text-xs font-medium text-purple-600 mb-1">
+                        Percentage
+                      </p>
+                      <p className="text-2xl font-bold text-gray-900">
+                        {attendanceStatsFiltered.percentage}%
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Summary Stats Bar */}
+                {filteredRecords.length > 0 && (
+                  <div className="mb-4 flex flex-wrap items-center gap-4 p-3 bg-gray-50 rounded-lg text-sm">
+                    <span className="font-medium text-gray-700">
+                      <span className="text-green-600">Present:</span> {attendanceStatsFiltered.present}
+                    </span>
+                    <span className="font-medium text-gray-700">
+                      <span className="text-red-600">Absent:</span> {attendanceStatsFiltered.absent}
+                    </span>
+                    <span className="font-medium text-gray-700">
+                      <span className="text-yellow-600">On Leave:</span> {attendanceStatsFiltered.leave}
+                    </span>
+                    <span className="font-medium text-gray-700">
+                      <span className="text-purple-600">Total:</span> {attendanceStatsFiltered.total}
+                    </span>
+                    {attendanceStatsFiltered.total > 0 && (
+                      <span className="ml-auto font-bold text-purple-600">
+                        {attendanceStatsFiltered.percentage}% Attendance
+                      </span>
+                    )}
+                  </div>
+                )}
+
+                {/* All Subjects Tab Content */}
+                <TabsContent value="all" className="mt-0">
+                  <AttendanceTable records={filteredRecords} />
+                </TabsContent>
+
+                {/* Individual Subject Tab Content */}
+                {availableSubjects.map((subject) => (
+                  <TabsContent key={subject.id} value={subject.id} className="mt-0">
+                    <AttendanceTable records={filteredRecords} />
+                  </TabsContent>
+                ))}
+              </Tabs>
+            )}
+
+            {/* No subjects available or no batch selected */}
+            {(!selectedAttendanceClass || availableSubjects.length === 0) && (
+              <div className="text-center py-12 text-gray-500 border-2 border-dashed rounded-lg bg-gray-50">
+                <Calendar className="w-12 h-12 mx-auto mb-3 opacity-30" />
+                <p className="text-sm">
+                  {!selectedAttendanceClass
+                    ? "Select a batch to view attendance records"
+                    : "No attendance records found for the selected filters."}
+                </p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+          </>
+        )}
       </div>
-      <Card>
-        <CardContent className="p-0">
-          <table className="w-full text-sm text-left">
-            <thead className="bg-gray-100 uppercase text-gray-600">
+    );
+  };
+
+  // Separate component for attendance table
+  const AttendanceTable = ({ records }) => {
+    return (
+      <div className="border rounded-lg overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-gray-50 border-b">
               <tr>
-                <th className="px-6 py-3">Roll</th>
-                <th className="px-6 py-3">Student</th>
-                <th className="px-6 py-3">Status</th>
-                <th className="px-6 py-3">Date</th>
+                <th className="px-4 py-3 text-left font-semibold text-gray-700">
+                  Date
+                </th>
+                <th className="px-4 py-3 text-left font-semibold text-gray-700">
+                  Roll
+                </th>
+                <th className="px-4 py-3 text-left font-semibold text-gray-700">
+                  Student
+                </th>
+                <th className="px-4 py-3 text-left font-semibold text-gray-700">
+                  Subject
+                </th>
+                <th className="px-4 py-3 text-center font-semibold text-gray-700">
+                  Status
+                </th>
               </tr>
             </thead>
-            <tbody>
-              {attendanceRecords.length > 0 ? (
-                attendanceRecords.map((record) => (
-                  <tr key={record.id} className="border-b">
-                    <td className="px-6 py-4">{record.students?.roll}</td>
-                    <td className="px-6 py-4">{record.students?.full_name}</td>
-                    <td className="px-6 py-4">
+            <tbody className="divide-y divide-gray-100">
+              {records.length > 0 ? (
+                records.map((record) => (
+                  <tr
+                    key={record.id}
+                    className="hover:bg-gray-50 transition-colors"
+                  >
+                    <td className="px-4 py-3 text-gray-900">
+                      <div className="flex flex-col">
+                        <span className="font-medium">
+                          {new Date(record.date).toLocaleDateString(undefined, {
+                            month: "short",
+                            day: "numeric",
+                            year: "numeric",
+                          })}
+                        </span>
+                        <span className="text-xs text-gray-500">
+                          {new Date(record.date).toLocaleDateString(undefined, {
+                            weekday: "short",
+                          })}
+                        </span>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 font-medium text-gray-600">
+                      {record.students?.roll || "-"}
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className="font-medium text-gray-900">
+                        {record.students?.full_name || "Unknown"}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className="font-medium text-gray-900">
+                        {record.subject?.name || "-"}
+                      </span>
+                      {record.subject?.code && (
+                        <span className="ml-2 text-xs text-gray-500">
+                          ({record.subject.code})
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-center">
                       <span
-                        className={`px-2 py-1 rounded text-xs ${
-                          record.status === "Present"
+                        className={`inline-flex px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wide ${
+                          record.status === "present"
                             ? "bg-green-100 text-green-700"
-                            : record.status === "Absent"
+                            : record.status === "absent"
                               ? "bg-red-100 text-red-700"
                               : "bg-yellow-100 text-yellow-700"
                         }`}
                       >
-                        {record.status}
+                        {record.status === "late" ? "on leave" : record.status}
                       </span>
                     </td>
-                    <td className="px-6 py-4">{record.date}</td>
                   </tr>
                 ))
               ) : (
                 <tr>
                   <td
-                    colSpan="4"
-                    className="px-6 py-8 text-center text-gray-500"
+                    colSpan="5"
+                    className="p-8 text-center text-gray-500"
                   >
-                    {selectedAttendanceClass
-                      ? "No records found for this date."
-                      : "Select a batch to view attendance records"}
+                    <div className="flex flex-col items-center gap-2">
+                      <Calendar className="w-8 h-8 opacity-30" />
+                      <p className="text-sm">
+                        No attendance records found for the selected filters.
+                      </p>
+                    </div>
                   </td>
                 </tr>
               )}
             </tbody>
           </table>
-        </CardContent>
-      </Card>
-
-      <div className="mt-8">
-        <h3 className="text-lg font-semibold mb-2 text-red-600">
-          Low Attendance Alert (&lt;75%)
-        </h3>
-        <Card className="border-red-200 bg-red-50">
-          <CardContent className="p-4">
-            <p className="text-sm text-red-700">
-              No students currently flagged for low attendance.
-            </p>
-          </CardContent>
-        </Card>
+        </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   // 6. Fees Component
   const renderFees = () => (
