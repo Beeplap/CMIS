@@ -31,14 +31,7 @@ export default function StudentNoticesView({ studentId, notices: noticesProp, lo
   }, [studentId, isControlled]);
 
   const fetchNotices = async () => {
-    if (!studentId) return;
-    if (isControlled && onRefresh) {
-      setRefreshing(true);
-      await onRefresh();
-      setRefreshing(false);
-      return;
-    }
-    if (isControlled) return;
+    if (!studentId || isControlled) return;
     setInternalLoading(true);
     try {
       const res = await fetch(`/api/notices?user_id=${studentId}&role=student&student_id=${studentId}`);
@@ -171,6 +164,10 @@ export default function StudentNoticesView({ studentId, notices: noticesProp, lo
 // Notice Card Component
 function NoticeCard({ notice, onMarkAsRead }) {
   const [isRead, setIsRead] = useState(notice.is_read || false);
+
+  React.useEffect(() => {
+    setIsRead(notice.is_read || false);
+  }, [notice.is_read]);
 
   const handleMarkAsRead = () => {
     if (!isRead) {

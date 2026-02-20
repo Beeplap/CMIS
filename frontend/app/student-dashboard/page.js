@@ -113,6 +113,12 @@ export default function StudentDashboardPage() {
     }
   }, [user?.id]);
 
+  const handleNoticeMarkAsRead = React.useCallback((noticeId) => {
+    setNotices((prev) =>
+      prev.map((n) => (n.id === noticeId ? { ...n, is_read: true } : n))
+    );
+  }, []);
+
   useEffect(() => {
     if (user?.id) fetchNotices();
   }, [user?.id, fetchNotices]);
@@ -265,6 +271,7 @@ export default function StudentDashboardPage() {
                 notices={notices}
                 loading={noticesLoading}
                 onRefresh={fetchNotices}
+                onMarkAsRead={handleNoticeMarkAsRead}
               />
               {/* Can add another widget here, e.g. upcoming schedule */}
               <Card>
@@ -300,6 +307,7 @@ export default function StudentDashboardPage() {
             notices={notices}
             loading={noticesLoading}
             onRefresh={fetchNotices}
+            onMarkAsRead={handleNoticeMarkAsRead}
           />
         )}
 

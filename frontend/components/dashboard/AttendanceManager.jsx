@@ -589,14 +589,14 @@ export default function AttendanceManager({ teacherId }) {
                   {!quickCompleted && currentStudent && (
                     <div className="bg-gradient-to-br from-purple-50 to-white border rounded-xl p-6 shadow-sm">
                       <div className="flex items-start justify-between gap-4">
-                        <div>
+                        <div className="flex-1 text-center">
                           <div className="text-xs font-semibold text-purple-700 uppercase tracking-wide">
                             Roll No
                           </div>
                           <div className="text-3xl font-bold text-gray-900 mt-1">
                             {currentStudent.roll || "-"}
                           </div>
-                          <div className="text-sm text-gray-500 mt-2">
+                          <div className="text-lg font-medium text-gray-700 mt-2">
                             {currentStudent.full_name}
                           </div>
                         </div>
