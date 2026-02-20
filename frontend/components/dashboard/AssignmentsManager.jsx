@@ -31,6 +31,7 @@ export default function AssignmentsManager({ teacherId }) {
   // Grading State
   const [selectedAssignment, setSelectedAssignment] = useState(null);
   const [submissions, setSubmissions] = useState([]); // List of students + their submissions
+  const [gradingValues, setGradingValues] = useState({}); // { studentId: { grade, feedback } }
 
   useEffect(() => {
     if (!teacherId) return;
@@ -121,6 +122,17 @@ export default function AssignmentsManager({ teacherId }) {
         });
         
         setSubmissions(merged || []);
+        // Initialize grading values from existing submissions
+        const initialValues = {};
+        merged?.forEach(s => {
+          if (s.submission) {
+            initialValues[s.id] = {
+              grade: s.submission.grade ?? "",
+              feedback: s.submission.feedback ?? ""
+            };
+          }
+        });
+        setGradingValues(initialValues);
         setView("grading");
       } catch (error) {
           console.error("Error loading submissions:", error);
@@ -155,18 +167,42 @@ export default function AssignmentsManager({ teacherId }) {
       setLoading(false);
   };
 
-  const handleGrade = async (studentId, grade, feedback) => {
-      // Find submission ID if exists, OR create new entry if we just want to grade a non-submission (e.g. offline work)
-      // For now, let's assume we can only grade existing submissions or create a placeholder.
-      // Logic: upsert submission record
+  const handleGradeChange = (studentId, field, value) => {
+    setGradingValues(prev => ({
+      ...prev,
+      [studentId]: {
+        ...prev[studentId],
+        [field]: value
+      }
+    }));
+  };
+
+  const handleGradeSave = async (studentId) => {
+      if (!selectedAssignment) return;
+      
       try {
-        const { error } = await supabase.from("submissions").upsert({
-            assignment_id: selectedAssignment.id,
-            student_id: studentId,
-            grade: grade,
-            feedback: feedback,
-            status: 'graded'
-        }, { onConflict: 'assignment_id, student_id' });
+        // Only allow grading if there's a submission (can't grade work that wasn't submitted)
+        const studentSubmission = submissions.find(s => s.id === studentId);
+        if (!studentSubmission?.submission) {
+          alert("Cannot grade: Student has not submitted this assignment yet.");
+          return;
+        }
+
+        const values = gradingValues[studentId] || {};
+        const gradeValue = values.grade ? parseFloat(values.grade) : null;
+        const feedbackValue = values.feedback?.trim() || null;
+
+        // Update existing submission with grade/feedback
+        const { error } = await supabase
+          .from("submissions")
+          .update({
+            grade: gradeValue,
+            feedback: feedbackValue,
+            status: 'graded',
+            updated_at: new Date().toISOString()
+          })
+          .eq("assignment_id", selectedAssignment.id)
+          .eq("student_id", studentId);
         
         if (error) throw error;
         
@@ -175,7 +211,12 @@ export default function AssignmentsManager({ teacherId }) {
             if (s.id === studentId) {
                 return { 
                     ...s, 
-                    submission: { ...(s.submission || {}), grade, feedback, status: 'graded' } 
+                    submission: { 
+                      ...s.submission, 
+                      grade: gradeValue, 
+                      feedback: feedbackValue, 
+                      status: 'graded' 
+                    } 
                 };
             }
             return s;
@@ -183,7 +224,7 @@ export default function AssignmentsManager({ teacherId }) {
 
       } catch (err) {
           console.error("Grading error:", err);
-          alert("Failed to save grade");
+          alert("Failed to save grade. Please try again.");
       }
   };
 
@@ -386,22 +427,31 @@ export default function AssignmentsManager({ teacherId }) {
                                         })()}
                                     </td>
                                     <td className="px-4 py-3">
-                                        <div className="flex gap-2 items-center">
-                                            <input 
-                                                type="number" 
-                                                placeholder="Grade" 
-                                                className="w-16 p-1 border rounded text-xs"
-                                                defaultValue={student.submission?.grade}
-                                                onBlur={(e) => handleGrade(student.id, e.target.value, student.submission?.feedback)}
-                                            />
-                                            <input 
-                                                type="text" 
-                                                placeholder="Feedback..." 
-                                                className="w-full p-1 border rounded text-xs"
-                                                defaultValue={student.submission?.feedback}
-                                                onBlur={(e) => handleGrade(student.id, student.submission?.grade, e.target.value)}
-                                            />
-                                        </div>
+                                        {student.submission ? (
+                                          <div className="flex gap-2 items-center">
+                                              <input 
+                                                  type="number" 
+                                                  placeholder="Grade" 
+                                                  min="0"
+                                                  max="100"
+                                                  step="0.1"
+                                                  className="w-20 p-1.5 border rounded text-xs focus:ring-2 focus:ring-purple-500 focus:outline-none"
+                                                  value={gradingValues[student.id]?.grade ?? student.submission?.grade ?? ""}
+                                                  onChange={(e) => handleGradeChange(student.id, "grade", e.target.value)}
+                                                  onBlur={() => handleGradeSave(student.id)}
+                                              />
+                                              <input 
+                                                  type="text" 
+                                                  placeholder="Feedback..." 
+                                                  className="flex-1 p-1.5 border rounded text-xs focus:ring-2 focus:ring-purple-500 focus:outline-none"
+                                                  value={gradingValues[student.id]?.feedback ?? student.submission?.feedback ?? ""}
+                                                  onChange={(e) => handleGradeChange(student.id, "feedback", e.target.value)}
+                                                  onBlur={() => handleGradeSave(student.id)}
+                                              />
+                                          </div>
+                                        ) : (
+                                          <span className="text-xs text-gray-400 italic">No submission yet</span>
+                                        )}
                                     </td>
                                 </tr>
                             ))}

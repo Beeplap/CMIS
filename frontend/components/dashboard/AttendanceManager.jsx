@@ -34,15 +34,19 @@ export default function AttendanceManager({ teacherId }) {
   }, [teacherId]);
 
   useEffect(() => {
-    if (selectedClassId) {
+    if (selectedClassId && classes.length > 0) {
       if (viewMode === "history") {
         fetchHistoryData();
       } else {
         // Both Daily and Quick need the same "daily" data
         fetchDailyData();
       }
+    } else if (selectedClassId && classes.length === 0) {
+      // Reset if class selected but classes not loaded yet
+      setStudents([]);
+      setAttendance({});
     }
-  }, [selectedClassId, selectedDate, viewMode]);
+  }, [selectedClassId, selectedDate, viewMode, classes]);
 
   // Reset quick progress when class/date changes
   useEffect(() => {
@@ -101,6 +105,12 @@ export default function AttendanceManager({ teacherId }) {
   };
 
   const fetchDailyData = async () => {
+    if (!selectedClassId) {
+      setStudents([]);
+      setAttendance({});
+      return;
+    }
+
     setLoading(true);
     try {
       // 1. Get selected assignment (class)
@@ -108,38 +118,54 @@ export default function AttendanceManager({ teacherId }) {
       if (!cls || !cls.batchId) {
         setStudents([]);
         setAttendance({});
+        setLoading(false);
         return;
       }
 
       // 2. Fetch students from the assigned batch
-      const { data: studentsData } = await supabase
+      const { data: studentsData, error: studentsError } = await supabase
         .from("students")
         .select("*")
         .eq("batch_id", cls.batchId)
         .order("roll", { ascending: true });
+
+      if (studentsError) {
+        console.error("Error fetching students:", studentsError);
+        setStudents([]);
+        setAttendance({});
+        setLoading(false);
+        return;
+      }
 
       setStudents(studentsData || []);
 
       // 3. Fetch Existing Attendance for Date
       if (studentsData?.length > 0) {
         const studentIds = studentsData.map(s => s.id);
-        const { data: attendanceData } = await supabase
+        const { data: attendanceData, error: attendanceError } = await supabase
           .from("attendance")
           .select("*")
           .in("student_id", studentIds)
           .eq("date", selectedDate)
           .eq("class_id", selectedClassId); // class_id references teaching_assignments.id
 
-        const attendanceMap = {};
-        attendanceData?.forEach(r => {
-          attendanceMap[r.student_id] = r.status;
-        });
-        setAttendance(attendanceMap);
+        if (attendanceError) {
+          console.error("Error fetching attendance:", attendanceError);
+          setAttendance({});
+        } else {
+          const attendanceMap = {};
+          attendanceData?.forEach(r => {
+            attendanceMap[r.student_id] = r.status;
+          });
+          setAttendance(attendanceMap);
+        }
       } else {
         setAttendance({});
       }
     } catch (error) {
       console.error("Error fetching daily data:", error);
+      setStudents([]);
+      setAttendance({});
     } finally {
       setLoading(false);
     }
@@ -215,12 +241,18 @@ export default function AttendanceManager({ teacherId }) {
 
   const handleSave = async () => {
     // Prevent double-click / spam clicking
-    if (loading) return;
+    if (loading || !selectedClassId || students.length === 0) return;
     
     setLoading(true);
     try {
       const cls = classes.find((c) => c.id === selectedClassId);
-      const subjectId = cls?.subjectId || null;
+      if (!cls) {
+        alert("Error: Class not found. Please refresh the page.");
+        setLoading(false);
+        return;
+      }
+
+      const subjectId = cls.subjectId || null;
 
       // Build updates for ALL students in this class, defaulting to "present"
       const updates = students.map((student) => {
@@ -242,10 +274,12 @@ export default function AttendanceManager({ teacherId }) {
          
          if (error) throw error;
          alert("Attendance saved successfully!");
+         // Optionally refresh to show saved state
+         await fetchDailyData();
       }
     } catch (error) {
       console.error("Error saving attendance:", error);
-      alert("Failed to save attendance.");
+      alert(`Failed to save attendance: ${error.message || "Please try again."}`);
     } finally {
       setLoading(false);
     }

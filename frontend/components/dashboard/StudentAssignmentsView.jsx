@@ -9,40 +9,48 @@ import {
   Clock,
   FileText,
   Upload,
-  AlertCircle
+  AlertCircle,
 } from "lucide-react";
 
-export default function StudentAssignmentsView({ studentId, studentClass }) {
+export default function StudentAssignmentsView({ studentId, batchId }) {
   const [loading, setLoading] = useState(true);
   const [assignments, setAssignments] = useState([]);
   const [submittingId, setSubmittingId] = useState(null);
   const [submissionText, setSubmissionText] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     if (studentId) fetchAssignments();
-  }, [studentId]);
+  }, [studentId, batchId]);
 
   const fetchAssignments = async () => {
     setLoading(true);
     try {
-      // Fetch the student's batch first
-      const { data: studentRow, error: studentError } = await supabase
-        .from("students")
-        .select("batch_id")
-        .eq("id", studentId)
-        .single();
+      // Prefer batchId passed from parent (student dashboard) to avoid extra query
+      let effectiveBatchId = batchId;
 
-      if (studentError || !studentRow?.batch_id) {
-        setAssignments([]);
-        setLoading(false);
-        return;
+      // Fallback: fetch the student's batch from DB if not provided
+      if (!effectiveBatchId) {
+        const { data: studentRow, error: studentError } = await supabase
+          .from("students")
+          .select("batch_id")
+          .eq("id", studentId)
+          .single();
+
+        if (studentError || !studentRow?.batch_id) {
+          setAssignments([]);
+          setLoading(false);
+          return;
+        }
+
+        effectiveBatchId = studentRow.batch_id;
       }
 
       // Find teaching_assignments (subject+batch) for this student's batch
       const { data: teachingAssignments, error: taError } = await supabase
         .from("teaching_assignments")
         .select("id, subject:subjects(name, code)")
-        .eq("batch_id", studentRow.batch_id);
+        .eq("batch_id", effectiveBatchId);
 
       if (taError || !teachingAssignments || teachingAssignments.length === 0) {
         setAssignments([]);
@@ -75,7 +83,7 @@ export default function StudentAssignmentsView({ studentId, studentClass }) {
         .eq("student_id", studentId);
 
       // 3. Merge
-      const merged = assignmentData.map((assign) => {
+      const merged = (assignmentData || []).map((assign) => {
         const sub = mySubmissions?.find((s) => s.assignment_id === assign.id);
         return { ...assign, submission: sub || null };
       });
@@ -89,32 +97,46 @@ export default function StudentAssignmentsView({ studentId, studentClass }) {
   };
 
   const handleSubmit = async (assignmentId) => {
-    if (!submissionText.trim()) return;
-    
+    if (!submissionText.trim()) {
+      alert("Please enter your submission (text or link) before submitting.");
+      return;
+    }
+
+    setSubmitting(true);
     try {
-        const { error } = await supabase.from("submissions").insert({
-            assignment_id: assignmentId,
-            student_id: studentId,
-            content: submissionText,
-            status: "submitted"
-        });
+      const { error } = await supabase.from("submissions").insert({
+        assignment_id: assignmentId,
+        student_id: studentId,
+        content: submissionText.trim(),
+        status: "submitted",
+      });
 
-        if (error) throw error;
-        
-        // Refresh local state
-        setAssignments(prev => prev.map(a => {
-            if (a.id === assignmentId) {
-                return { ...a, submission: { content: submissionText, status: "submitted", submitted_at: new Date() } };
-            }
-            return a;
-        }));
-        setSubmissionText("");
-        setSubmittingId(null);
-        alert("Assignment submitted successfully!");
+      if (error) throw error;
 
+      // Refresh local state
+      setAssignments((prev) =>
+        prev.map((a) => {
+          if (a.id === assignmentId) {
+            return {
+              ...a,
+              submission: {
+                content: submissionText.trim(),
+                status: "submitted",
+                submitted_at: new Date().toISOString(),
+              },
+            };
+          }
+          return a;
+        }),
+      );
+      setSubmissionText("");
+      setSubmittingId(null);
+      alert("Assignment submitted successfully!");
     } catch (err) {
-        console.error("Submission error:", err);
-        alert("Failed to submit.");
+      console.error("Submission error:", err);
+      alert(`Failed to submit: ${err.message || "Please try again."}`);
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -193,8 +215,24 @@ export default function StudentAssignmentsView({ studentId, studentClass }) {
                                             onChange={e => setSubmissionText(e.target.value)}
                                         />
                                         <div className="flex gap-2">
-                                            <Button size="sm" onClick={() => handleSubmit(assignment.id)}>Submit Work</Button>
-                                            <Button size="sm" variant="ghost" onClick={() => setSubmittingId(null)}>Cancel</Button>
+                                            <Button 
+                                              size="sm" 
+                                              onClick={() => handleSubmit(assignment.id)}
+                                              disabled={submitting || !submissionText.trim()}
+                                            >
+                                              {submitting ? "Submitting..." : "Submit Work"}
+                                            </Button>
+                                            <Button 
+                                              size="sm" 
+                                              variant="ghost" 
+                                              onClick={() => {
+                                                setSubmittingId(null);
+                                                setSubmissionText("");
+                                              }}
+                                              disabled={submitting}
+                                            >
+                                              Cancel
+                                            </Button>
                                         </div>
                                     </div>
                                 )}

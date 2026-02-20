@@ -672,10 +672,17 @@ export default function AdminPage() {
     setLoading(true);
     try {
       // Find teaching_assignments for this batch
-      const { data: teachingAssignments } = await supabase
+      const { data: teachingAssignments, error: taError } = await supabase
         .from("teaching_assignments")
         .select("id")
         .eq("batch_id", batchId);
+
+      if (taError) {
+        console.error("Error fetching teaching assignments:", taError);
+        setAttendanceRecords([]);
+        setLoading(false);
+        return;
+      }
 
       const teachingIds = teachingAssignments?.map((ta) => ta.id) || [];
 

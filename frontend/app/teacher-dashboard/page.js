@@ -140,10 +140,39 @@ export default function TeacherDashboardPage() {
     fetchUser();
   }, [router]);
 
-  // Reusing existing stats logic (simplified for brevity if unchanged, but included for completeness)
+  // Optimized attendance stats - fetch all data in one query instead of multiple
   const fetchAttendanceStats = async (teacherId, classes) => {
     try {
       const today = new Date().toISOString().split("T")[0];
+      const yearAgo = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000)
+        .toISOString()
+        .split("T")[0];
+
+      // Single query to fetch all attendance records for this teacher (last year)
+      const { data: allAttendance, error } = await supabase
+        .from("attendance")
+        .select("date, subject_id")
+        .eq("marked_by", teacherId)
+        .gte("date", yearAgo)
+        .order("date", { ascending: false });
+
+      if (error) {
+        console.error("Error fetching attendance stats:", error);
+        return;
+      }
+
+      // Calculate today's stats
+      const todayAttendance = allAttendance?.filter((a) => a.date === today) || [];
+      const todayTotal = classes.length;
+      const todayUniqueSubjects = new Set(
+        todayAttendance.map((a) => a.subject_id).filter(Boolean),
+      ).size;
+      const todaySuccessful = todayUniqueSubjects || 0;
+      const todayMissed = Math.max(0, todayTotal - todaySuccessful);
+
+      // Calculate time percentages for different periods
+      const timePercentages = {};
+      const PERIOD_DURATION = 45;
       const now = new Date();
       const ranges = {
         day: new Date(now.getTime() - 24 * 60 * 60 * 1000),
@@ -154,32 +183,14 @@ export default function TeacherDashboardPage() {
         year: new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000),
       };
 
-      const { data: todayAttendance } = await supabase
-        .from("attendance")
-        .select("date, subject_id")
-        .eq("marked_by", teacherId)
-        .eq("date", today);
-
-      const todayTotal = classes.length;
-      const todayUniqueSubjects = new Set(
-        todayAttendance?.map((a) => a.subject_id).filter(Boolean) || [],
-      ).size;
-      const todaySuccessful = todayUniqueSubjects || 0;
-      const todayMissed = Math.max(0, todayTotal - todaySuccessful);
-
-      const timePercentages = {};
-      const PERIOD_DURATION = 45;
-
       for (const [period, startDate] of Object.entries(ranges)) {
         const startDateStr = startDate.toISOString().split("T")[0];
-        const { data: attendanceRecords } = await supabase
-          .from("attendance")
-          .select("date")
-          .eq("marked_by", teacherId)
-          .gte("date", startDateStr);
+        const periodRecords = allAttendance?.filter(
+          (r) => r.date >= startDateStr,
+        ) || [];
 
-        if (attendanceRecords && attendanceRecords.length > 0) {
-          const uniqueDays = new Set(attendanceRecords.map((r) => r.date)).size;
+        if (periodRecords.length > 0) {
+          const uniqueDays = new Set(periodRecords.map((r) => r.date)).size;
           const totalTimeSpent = uniqueDays * PERIOD_DURATION * classes.length;
           const daysInRange = Math.ceil(
             (now - startDate) / (24 * 60 * 60 * 1000),

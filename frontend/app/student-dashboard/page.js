@@ -74,7 +74,10 @@ export default function StudentDashboardPage() {
           .select("status")
           .eq("student_id", authUser.id);
 
-        if (!attendanceError && attendanceData) {
+        if (attendanceError) {
+          console.error("Error fetching attendance summary:", attendanceError);
+          setAttendanceSummary({ total: 0, present: 0, percentage: 0 });
+        } else if (attendanceData) {
           const total = attendanceData.length;
           const present = attendanceData.filter(
             (r) => r.status === "present",
@@ -82,6 +85,8 @@ export default function StudentDashboardPage() {
           const percentage =
             total > 0 ? Math.round((present / total) * 100) : 0;
           setAttendanceSummary({ total, present, percentage });
+        } else {
+          setAttendanceSummary({ total: 0, present: 0, percentage: 0 });
         }
       } catch (error) {
         console.error("Error:", error);
@@ -258,7 +263,7 @@ export default function StudentDashboardPage() {
         {currentView === "assignments" && (
           <StudentAssignmentsView
             studentId={user?.id}
-            studentClass={studentData?.class}
+            batchId={studentData?.batch_id}
           />
         )}
 
