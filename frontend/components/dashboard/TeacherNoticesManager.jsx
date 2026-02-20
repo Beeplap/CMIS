@@ -11,6 +11,7 @@ import {
   Download,
   Calendar,
   X,
+  RefreshCw,
 } from "lucide-react";
 
 export default function TeacherNoticesManager({ teacherId }) {
@@ -19,6 +20,9 @@ export default function TeacherNoticesManager({ teacherId }) {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingNotice, setEditingNotice] = useState(null);
   const [teachingAssignments, setTeachingAssignments] = useState([]);
+
+  const [submitting, setSubmitting] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
   const [formData, setFormData] = useState({
     title: "",
@@ -68,6 +72,8 @@ export default function TeacherNoticesManager({ teacherId }) {
 
   const handleCreate = async (e) => {
     e.preventDefault();
+    if (submitting) return;
+    setSubmitting(true);
     try {
       const res = await fetch("/api/notices", {
         method: "POST",
@@ -91,11 +97,15 @@ export default function TeacherNoticesManager({ teacherId }) {
     } catch (error) {
       console.error("Error creating notice:", error);
       alert("Failed to create notice");
+    } finally {
+      setSubmitting(false);
     }
   };
 
   const handleUpdate = async (e) => {
     e.preventDefault();
+    if (submitting) return;
+    setSubmitting(true);
     try {
       const res = await fetch(`/api/notices/${editingNotice.id}`, {
         method: "PUT",
@@ -118,6 +128,8 @@ export default function TeacherNoticesManager({ teacherId }) {
     } catch (error) {
       console.error("Error updating notice:", error);
       alert("Failed to update notice");
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -194,16 +206,31 @@ export default function TeacherNoticesManager({ teacherId }) {
             Create notices for your assigned batches
           </p>
         </div>
-        <Button
-          onClick={() => {
-            resetForm();
-            setEditingNotice(null);
-            setShowCreateModal(true);
-          }}
-          className="bg-purple-600 hover:bg-purple-700"
-        >
-          <Plus className="w-4 h-4 mr-2" /> Create Notice
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={async () => {
+              setRefreshing(true);
+              await fetchNotices();
+              setRefreshing(false);
+            }}
+            disabled={refreshing}
+            title="Refresh notices"
+          >
+            <RefreshCw className={`w-4 h-4 ${refreshing ? "animate-spin" : ""}`} />
+          </Button>
+          <Button
+            onClick={() => {
+              resetForm();
+              setEditingNotice(null);
+              setShowCreateModal(true);
+            }}
+            className="bg-purple-600 hover:bg-purple-700"
+          >
+            <Plus className="w-4 h-4 mr-2" /> Create Notice
+          </Button>
+        </div>
       </div>
 
       {/* Notices List */}
@@ -413,8 +440,12 @@ export default function TeacherNoticesManager({ teacherId }) {
                   >
                     Cancel
                   </Button>
-                  <Button type="submit" className="bg-purple-600 hover:bg-purple-700">
-                    {editingNotice ? "Update Notice" : "Create Notice"}
+                  <Button
+                    type="submit"
+                    className="bg-purple-600 hover:bg-purple-700"
+                    disabled={submitting}
+                  >
+                    {submitting ? "Saving..." : editingNotice ? "Update Notice" : "Create Notice"}
                   </Button>
                 </div>
               </form>

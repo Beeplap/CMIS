@@ -230,7 +230,7 @@ export default function TeacherDashboardPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <div className="flex">
+      <div className="flex min-h-screen">
         <Sidebar
           role="teacher"
           open={sidebarOpen}

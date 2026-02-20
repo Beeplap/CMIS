@@ -1,18 +1,21 @@
 "use client";
 import React, { useState, useEffect } from "react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import { Bell, Calendar, Pin, Download } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Bell, Calendar, Pin, Download, RefreshCw } from "lucide-react";
 
 export default function NoticesBoard({ role = "teacher", userId, limit = 5 }) {
   const [notices, setNotices] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
     if (userId) fetchNotices();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [role, userId]);
 
-  const fetchNotices = async () => {
+  const fetchNotices = async (isRefresh = false) => {
+    if (!isRefresh) setLoading(true);
     try {
       const res = await fetch(`/api/notices?user_id=${userId}&role=${role}`);
       const data = await res.json();
@@ -25,6 +28,12 @@ export default function NoticesBoard({ role = "teacher", userId, limit = 5 }) {
     }
   };
 
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await fetchNotices(true);
+    setRefreshing(false);
+  };
+
   if (!userId) return null;
   if (loading)
     return (
@@ -32,7 +41,19 @@ export default function NoticesBoard({ role = "teacher", userId, limit = 5 }) {
     );
 
   return (
-    <div className="grid grid-cols-1 gap-3">
+    <div>
+      <div className="flex justify-end mb-2">
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={handleRefresh}
+          disabled={refreshing}
+          title="Refresh notices"
+        >
+          <RefreshCw className={`w-4 h-4 ${refreshing ? "animate-spin" : ""}`} />
+        </Button>
+      </div>
+      <div className="grid grid-cols-1 gap-3">
       {notices.length === 0 ? (
         <div className="p-6 text-center text-gray-500 text-sm">
           No notices at the moment.
@@ -84,6 +105,7 @@ export default function NoticesBoard({ role = "teacher", userId, limit = 5 }) {
           </Card>
         ))
       )}
+      </div>
     </div>
   );
 }

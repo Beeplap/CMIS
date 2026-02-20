@@ -9,11 +9,13 @@ import {
   Pin,
   CheckCircle,
   Circle,
+  RefreshCw,
 } from "lucide-react";
 
 export default function StudentNoticesView({ studentId }) {
   const [notices, setNotices] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
     if (studentId) {
@@ -84,6 +86,19 @@ export default function StudentNoticesView({ studentId }) {
             </p>
           )}
         </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={async () => {
+            setRefreshing(true);
+            await fetchNotices();
+            setRefreshing(false);
+          }}
+          disabled={refreshing}
+          title="Refresh notices"
+        >
+          <RefreshCw className={`w-4 h-4 ${refreshing ? "animate-spin" : ""}`} />
+        </Button>
       </div>
 
       {/* Pinned Notices */}

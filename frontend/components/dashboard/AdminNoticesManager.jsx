@@ -16,6 +16,7 @@ import {
   Users,
   X,
   CheckCircle,
+  RefreshCw,
 } from "lucide-react";
 
 export default function AdminNoticesManager({ userId }) {
@@ -26,6 +27,9 @@ export default function AdminNoticesManager({ userId }) {
   const [batches, setBatches] = useState([]);
   const [courses, setCourses] = useState([]);
   const [selectedNoticeReads, setSelectedNoticeReads] = useState(null);
+
+  const [submitting, setSubmitting] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
   const [formData, setFormData] = useState({
     title: "",
@@ -72,6 +76,8 @@ export default function AdminNoticesManager({ userId }) {
 
   const handleCreate = async (e) => {
     e.preventDefault();
+    if (submitting) return;
+    setSubmitting(true);
     try {
       const res = await fetch("/api/notices", {
         method: "POST",
@@ -95,11 +101,15 @@ export default function AdminNoticesManager({ userId }) {
     } catch (error) {
       console.error("Error creating notice:", error);
       alert("Failed to create notice");
+    } finally {
+      setSubmitting(false);
     }
   };
 
   const handleUpdate = async (e) => {
     e.preventDefault();
+    if (submitting) return;
+    setSubmitting(true);
     try {
       const res = await fetch(`/api/notices/${editingNotice.id}`, {
         method: "PUT",
@@ -122,6 +132,8 @@ export default function AdminNoticesManager({ userId }) {
     } catch (error) {
       console.error("Error updating notice:", error);
       alert("Failed to update notice");
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -226,16 +238,31 @@ export default function AdminNoticesManager({ userId }) {
             Create and manage notices for all users
           </p>
         </div>
-        <Button
-          onClick={() => {
-            resetForm();
-            setEditingNotice(null);
-            setShowCreateModal(true);
-          }}
-          className="bg-purple-600 hover:bg-purple-700"
-        >
-          <Plus className="w-4 h-4 mr-2" /> Create Notice
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={async () => {
+              setRefreshing(true);
+              await fetchNotices();
+              setRefreshing(false);
+            }}
+            disabled={refreshing}
+            title="Refresh notices"
+          >
+            <RefreshCw className={`w-4 h-4 ${refreshing ? "animate-spin" : ""}`} />
+          </Button>
+          <Button
+            onClick={() => {
+              resetForm();
+              setEditingNotice(null);
+              setShowCreateModal(true);
+            }}
+            className="bg-purple-600 hover:bg-purple-700"
+          >
+            <Plus className="w-4 h-4 mr-2" /> Create Notice
+          </Button>
+        </div>
       </div>
 
       {/* Notices List */}
@@ -507,16 +534,17 @@ export default function AdminNoticesManager({ userId }) {
                   />
                 </div>
 
-                <div className="flex items-center gap-4">
-                  <label className="flex items-center gap-2">
+                <div className="flex items-center justify-end">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <span className="text-sm">Pin this notice</span>
                     <input
                       type="checkbox"
                       checked={formData.is_pinned}
                       onChange={(e) =>
                         setFormData({ ...formData, is_pinned: e.target.checked })
                       }
+                      className="rounded border-gray-300 text-blue-600"
                     />
-                    <span className="text-sm">Pin this notice</span>
                   </label>
                 </div>
 
@@ -546,8 +574,12 @@ export default function AdminNoticesManager({ userId }) {
                   >
                     Cancel
                   </Button>
-                  <Button type="submit" className="bg-purple-600 hover:bg-purple-700">
-                    {editingNotice ? "Update Notice" : "Create Notice"}
+                  <Button
+                    type="submit"
+                    className="bg-purple-600 hover:bg-purple-700"
+                    disabled={submitting}
+                  >
+                    {submitting ? "Saving..." : editingNotice ? "Update Notice" : "Create Notice"}
                   </Button>
                 </div>
               </form>
