@@ -30,6 +30,8 @@ export default function StudentDashboardPage() {
     present: 0,
     percentage: 0,
   });
+  const [notices, setNotices] = useState([]);
+  const [noticesLoading, setNoticesLoading] = useState(true);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [currentView, setCurrentView] = useState("dashboard");
@@ -96,6 +98,24 @@ export default function StudentDashboardPage() {
     };
     fetchUser();
   }, [router]);
+
+  const fetchNotices = React.useCallback(async () => {
+    if (!user?.id) return;
+    setNoticesLoading(true);
+    try {
+      const res = await fetch(`/api/notices?user_id=${user.id}&role=student&student_id=${user.id}`);
+      const data = await res.json();
+      if (data.notices) setNotices(data.notices);
+    } catch (error) {
+      console.error("Error fetching notices:", error);
+    } finally {
+      setNoticesLoading(false);
+    }
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (user?.id) fetchNotices();
+  }, [user?.id, fetchNotices]);
 
   if (loading) {
     return (
@@ -240,7 +260,12 @@ export default function StudentDashboardPage() {
 
             {/* Recent Activity / Notices Widget */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <StudentNoticesView studentId={user?.id} />
+              <StudentNoticesView
+                studentId={user?.id}
+                notices={notices}
+                loading={noticesLoading}
+                onRefresh={fetchNotices}
+              />
               {/* Can add another widget here, e.g. upcoming schedule */}
               <Card>
                 <CardHeader>
@@ -270,7 +295,12 @@ export default function StudentDashboardPage() {
         {currentView === "marks" && <StudentMarksView studentId={user?.id} />}
 
         {currentView === "notices" && (
-          <StudentNoticesView studentId={user?.id} />
+          <StudentNoticesView
+            studentId={user?.id}
+            notices={notices}
+            loading={noticesLoading}
+            onRefresh={fetchNotices}
+          />
         )}
 
         {currentView === "profile" && (

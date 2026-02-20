@@ -12,31 +12,54 @@ import {
   RefreshCw,
 } from "lucide-react";
 
-export default function StudentNoticesView({ studentId }) {
-  const [notices, setNotices] = useState([]);
-  const [loading, setLoading] = useState(true);
+export default function StudentNoticesView({ studentId, notices: noticesProp, loading: loadingProp, onRefresh, onMarkAsRead: onMarkAsReadCallback }) {
+  const [internalNotices, setInternalNotices] = useState([]);
+  const [internalLoading, setInternalLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
+  const isControlled = noticesProp !== undefined;
+  const notices = isControlled ? noticesProp : internalNotices;
+  const loading = isControlled ? (loadingProp ?? false) : internalLoading;
+
   useEffect(() => {
+    if (isControlled) return;
     if (studentId) {
       fetchNotices();
     } else {
-      setLoading(false);
+      setInternalLoading(false);
     }
-  }, [studentId]);
+  }, [studentId, isControlled]);
 
   const fetchNotices = async () => {
-    setLoading(true);
+    if (!studentId) return;
+    if (isControlled && onRefresh) {
+      setRefreshing(true);
+      await onRefresh();
+      setRefreshing(false);
+      return;
+    }
+    if (isControlled) return;
+    setInternalLoading(true);
     try {
       const res = await fetch(`/api/notices?user_id=${studentId}&role=student&student_id=${studentId}`);
       const data = await res.json();
-      if (data.notices) {
-        setNotices(data.notices);
-      }
+      if (data.notices) setInternalNotices(data.notices);
     } catch (error) {
       console.error("Error fetching notices:", error);
     } finally {
-      setLoading(false);
+      setInternalLoading(false);
+    }
+  };
+
+  const handleRefresh = async () => {
+    if (isControlled && onRefresh) {
+      setRefreshing(true);
+      await onRefresh();
+      setRefreshing(false);
+    } else {
+      setRefreshing(true);
+      await fetchNotices();
+      setRefreshing(false);
     }
   };
 
@@ -49,12 +72,15 @@ export default function StudentNoticesView({ studentId }) {
       });
 
       if (res.ok) {
-        // Update local state
-        setNotices((prev) =>
-          prev.map((notice) =>
-            notice.id === noticeId ? { ...notice, is_read: true } : notice
-          )
-        );
+        if (isControlled && onMarkAsReadCallback) {
+          onMarkAsReadCallback(noticeId);
+        } else if (!isControlled) {
+          setInternalNotices((prev) =>
+            prev.map((notice) =>
+              notice.id === noticeId ? { ...notice, is_read: true } : notice
+            )
+          );
+        }
       }
     } catch (error) {
       console.error("Error marking notice as read:", error);
@@ -91,11 +117,7 @@ export default function StudentNoticesView({ studentId }) {
         <Button
           variant="outline"
           size="sm"
-          onClick={async () => {
-            setRefreshing(true);
-            await fetchNotices();
-            setRefreshing(false);
-          }}
+          onClick={handleRefresh}
           disabled={refreshing}
           title="Refresh notices"
         >
