@@ -25,6 +25,7 @@ import {
   Menu,
   RefreshCw,
   AlertTriangle,
+  AlertCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
@@ -106,8 +107,19 @@ export default function AdminPage() {
       setTeachers(usersData.filter((u) => u.role === "teacher"));
     }
 
-    // Fetch Students
-    const { data: studentsData } = await supabase.from("students").select("*");
+    // Fetch Students with batch information
+    const { data: studentsData } = await supabase
+      .from("students")
+      .select(`
+        *,
+        batch:batches(
+          id,
+          academic_unit,
+          section,
+          course:courses(code, name)
+        )
+      `)
+      .order("roll", { ascending: true, nullsFirst: false });
     if (studentsData) setStudents(studentsData);
 
     // Fetch Batches
@@ -446,90 +458,219 @@ export default function AdminPage() {
     </div>
   );
 
-  // 2. Students Component
-  const renderStudents = () => {
-    const filtered = students.filter(
+  // Sort and filter students (at component level)
+  const sortedAndFilteredStudents = useMemo(() => {
+    let filtered = students.filter(
       (s) =>
         s.full_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        s.roll?.toLowerCase().includes(searchQuery.toLowerCase()),
+        s.roll?.toString().toLowerCase().includes(searchQuery.toLowerCase()) ||
+        s.batch?.course?.code?.toLowerCase().includes(searchQuery.toLowerCase()),
     );
+
+    // Sort by roll number ascending (nulls last)
+    filtered.sort((a, b) => {
+      const rollA = a.roll ?? 999999;
+      const rollB = b.roll ?? 999999;
+      return rollA - rollB;
+    });
+
+    return filtered;
+  }, [students, searchQuery]);
+
+  // Calculate student stats (at component level)
+  const studentStats = useMemo(() => {
+    const total = students.length;
+    const withBatch = students.filter(s => s.batch_id).length;
+    const withoutBatch = total - withBatch;
+    return { total, withBatch, withoutBatch };
+  }, [students]);
+
+  // 2. Students Component
+  const renderStudents = () => {
+
     return (
-      <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
-        <div className="flex justify-between items-center">
-          <h2 className="text-2xl font-bold">Student Management</h2>
+      <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+        {/* Header with Stats */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div>
+            <h2 className="text-2xl font-bold text-gray-900">Student Management</h2>
+            <p className="text-sm text-gray-500 mt-1">
+              Manage all students, their batches, and information
+            </p>
+          </div>
           <Button
             onClick={() => handleAddUser("student")}
-            className="bg-purple-600"
+            className="bg-purple-600 hover:bg-purple-700 text-white"
           >
             <Plus className="w-4 h-4 mr-2" /> Add Student
           </Button>
         </div>
-        <div className="flex gap-4 mb-4">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-500" />
-            <Input
-              placeholder="Search students..."
-              className="pl-10"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
-          </div>
-          <Button variant="outline">
-            <Filter className="w-4 h-4 mr-2" /> Filter
-          </Button>
+
+        {/* Stats Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <Card className="bg-gradient-to-br from-blue-50 to-blue-100 border-blue-200">
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-medium text-blue-700 mb-1">Total Students</p>
+                  <p className="text-3xl font-bold text-blue-900">{studentStats.total}</p>
+                </div>
+                <Users className="w-10 h-10 text-blue-400 opacity-50" />
+              </div>
+            </CardContent>
+          </Card>
+          <Card className="bg-gradient-to-br from-green-50 to-green-100 border-green-200">
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-medium text-green-700 mb-1">Assigned to Batch</p>
+                  <p className="text-3xl font-bold text-green-900">{studentStats.withBatch}</p>
+                </div>
+                <CheckCircle className="w-10 h-10 text-green-400 opacity-50" />
+              </div>
+            </CardContent>
+          </Card>
+          <Card className="bg-gradient-to-br from-orange-50 to-orange-100 border-orange-200">
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-medium text-orange-700 mb-1">Unassigned</p>
+                  <p className="text-3xl font-bold text-orange-900">{studentStats.withoutBatch}</p>
+                </div>
+                <AlertCircle className="w-10 h-10 text-orange-400 opacity-50" />
+              </div>
+            </CardContent>
+          </Card>
         </div>
+
+        {/* Search and Filters */}
         <Card>
+          <CardContent className="p-4">
+            <div className="flex flex-col sm:flex-row gap-4">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <Input
+                  placeholder="Search by name, roll number, or batch..."
+                  className="pl-10"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                />
+              </div>
+              <div className="flex items-center gap-2 text-sm text-gray-600">
+                <span className="font-medium">Showing:</span>
+                <span className="font-bold text-purple-600">{sortedAndFilteredStudents.length}</span>
+                <span>of {studentStats.total} students</span>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Students Table */}
+        <Card className="shadow-sm">
           <div className="overflow-x-auto">
-            <table className="w-full text-sm text-left">
-              <thead className="bg-gray-100 uppercase text-gray-600">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 border-b">
                 <tr>
-                  <th className="px-6 py-3">Roll</th>
-                  <th className="px-6 py-3">Name</th>
-                  <th className="px-6 py-3">Class</th>
-                  <th className="px-6 py-3">Guardian</th>
-                  <th className="px-6 py-3 text-right">Actions</th>
+                  <th className="px-6 py-4 text-left font-semibold text-gray-700">Roll No</th>
+                  <th className="px-6 py-4 text-left font-semibold text-gray-700">Student Name</th>
+                  <th className="px-6 py-4 text-left font-semibold text-gray-700">Batch / Class</th>
+                  <th className="px-6 py-4 text-left font-semibold text-gray-700">Contact</th>
+                  <th className="px-6 py-4 text-right font-semibold text-gray-700">Actions</th>
                 </tr>
               </thead>
-              <tbody>
-                {filtered.map((s) => (
-                  <tr key={s.id} className="border-b hover:bg-gray-50">
-                    <td className="px-6 py-4 font-medium">{s.roll}</td>
-                    <td className="px-6 py-4">{s.full_name}</td>
-                    <td className="px-6 py-4">
-                      {s.class} - {s.section}
-                    </td>
-                    <td className="px-6 py-4">{s.guardian_name}</td>
-                    <td className="px-6 py-4 text-right space-x-2">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-8 w-8 p-0 text-blue-600"
-                      >
-                        <Edit className="w-4 h-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-8 w-8 p-0 text-red-600"
-                        onClick={() => handleDeleteUser(s.id, "student")}
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        title="Assign Class"
-                        onClick={() => setShowAddClass(true)}
-                      >
-                        <BookOpen className="w-4 h-4 text-gray-500" />
-                      </Button>
-                    </td>
-                  </tr>
-                ))}
-                {filtered.length === 0 && (
+              <tbody className="divide-y divide-gray-100">
+                {sortedAndFilteredStudents.map((s) => {
+                  const batchInfo = s.batch
+                    ? `${s.batch.course?.code || "N/A"} Sem-${s.batch.academic_unit}${s.batch.section ? ` (${s.batch.section})` : ""}`
+                    : s.class && s.section
+                      ? `${s.class} - ${s.section}`
+                      : "Not Assigned";
+                  
+                  return (
+                    <tr key={s.id} className="hover:bg-gray-50 transition-colors">
+                      <td className="px-6 py-4">
+                        <span className="font-semibold text-gray-900">
+                          {s.roll ?? <span className="text-gray-400 italic">-</span>}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="flex flex-col">
+                          <span className="font-medium text-gray-900">{s.full_name || "N/A"}</span>
+                          {s.email && (
+                            <span className="text-xs text-gray-500">{s.email}</span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        {s.batch_id ? (
+                          <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                            {batchInfo}
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-orange-100 text-orange-800">
+                            {batchInfo}
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-6 py-4 text-gray-600">
+                        {s.guardian_contact ? (
+                          <a href={`tel:${s.guardian_contact}`} className="hover:text-purple-600 hover:underline">
+                            {s.guardian_contact}
+                          </a>
+                        ) : (
+                          <span className="text-gray-400 italic">-</span>
+                        )}
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="flex items-center justify-end gap-2">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 w-8 p-0 text-blue-600 hover:bg-blue-50"
+                            title="Edit Student"
+                          >
+                            <Edit className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 w-8 p-0 text-purple-600 hover:bg-purple-50"
+                            title="Assign to Batch"
+                            onClick={() => {
+                              // TODO: Open batch assignment modal
+                              alert(`Assign ${s.full_name} to a batch`);
+                            }}
+                          >
+                            <BookOpen className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 w-8 p-0 text-red-600 hover:bg-red-50"
+                            title="Delete Student"
+                            onClick={() => {
+                              if (confirm(`Are you sure you want to delete ${s.full_name}?`)) {
+                                handleDeleteUser(s.id, "student");
+                              }
+                            }}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+                {sortedAndFilteredStudents.length === 0 && (
                   <tr>
-                    <td colSpan="5" className="text-center py-8 text-gray-500">
-                      No students found
+                    <td colSpan="5" className="text-center py-12">
+                      <div className="flex flex-col items-center gap-2">
+                        <Users className="w-12 h-12 text-gray-300" />
+                        <p className="text-gray-500 font-medium">No students found</p>
+                        <p className="text-sm text-gray-400">
+                          {searchQuery ? "Try adjusting your search criteria" : "Add your first student to get started"}
+                        </p>
+                      </div>
                     </td>
                   </tr>
                 )}
