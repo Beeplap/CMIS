@@ -240,7 +240,7 @@ export default function StudentDashboardPage() {
 
             {/* Recent Activity / Notices Widget */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <StudentNoticesView />
+              <StudentNoticesView studentId={user?.id} />
               {/* Can add another widget here, e.g. upcoming schedule */}
               <Card>
                 <CardHeader>

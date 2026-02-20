@@ -20,6 +20,8 @@ export default function StudentNoticesView({ studentId }) {
   useEffect(() => {
     if (studentId) {
       fetchNotices();
+    } else {
+      setLoading(false);
     }
   }, [studentId]);
 
