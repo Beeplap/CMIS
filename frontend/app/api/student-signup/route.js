@@ -132,7 +132,6 @@ export async function POST(req) {
       roll: null, // Roll number will be assigned when added to a batch
       full_name: fullName,
       dob: dob,
-      // batch_id: invitation.batch_id // We don't have this yet in invitations, leaving null
     });
 
     if (studentError) {
@@ -152,7 +151,54 @@ export async function POST(req) {
       );
     }
 
-    // 8. Mark Invitation as Claimed
+    // 8. Assign new student to default 5th semester batch (if available)
+    try {
+      const { data: defaultBatch, error: batchError } = await supabase
+        .from("batches")
+        .select("id, academic_unit, admission_year")
+        .eq("academic_unit", 5)
+        .eq("is_active", true)
+        .order("admission_year", { ascending: false })
+        .limit(1)
+        .single();
+
+      if (batchError) {
+        console.error("Failed to fetch default 5th sem batch:", batchError);
+      } else if (defaultBatch) {
+        // Link student to this batch
+        const { error: updateStudentError } = await supabase
+          .from("students")
+          .update({ batch_id: defaultBatch.id })
+          .eq("id", userId);
+
+        if (updateStudentError) {
+          console.error(
+            "Failed to assign new student to default 5th sem batch:",
+            updateStudentError,
+          );
+        } else {
+          // Recalculate rolls for that batch, best-effort (don't fail signup)
+          try {
+            const { recalculateBatchRolls } = await import(
+              "@/lib/rollGenerator"
+            );
+            await recalculateBatchRolls(supabase, defaultBatch.id);
+          } catch (rollError) {
+            console.error(
+              "Failed to recalculate rolls for default 5th sem batch:",
+              rollError,
+            );
+          }
+        }
+      }
+    } catch (assignErr) {
+      console.error(
+        "Unexpected error while assigning default 5th sem batch:",
+        assignErr,
+      );
+    }
+
+    // 9. Mark Invitation as Claimed
     await supabase
       .from("student_invitations")
       .update({ is_claimed: true })

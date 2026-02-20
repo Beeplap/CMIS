@@ -1,4 +1,3 @@
-import SupabaseHealthCheck from "@/components/SupabaseHealthCheck";
 import "./globals.css";
 
 export const metadata = {
@@ -10,7 +9,7 @@ export default function RootLayout({ children }) {
   return (
     <html lang="en">
       <body className="antialiased">
-        <SupabaseHealthCheck>{children}</SupabaseHealthCheck>
+        {children}
       </body>
     </html>
   );
