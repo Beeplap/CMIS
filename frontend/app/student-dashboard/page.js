@@ -158,7 +158,7 @@ export default function StudentDashboardPage() {
                 </div>
                 <div className="bg-white/20 p-4 rounded-xl backdrop-blur-sm">
                   <p className="text-sm font-medium">Academic Year</p>
-                  <p className="text-xl font-bold">2025-2026</p>
+                  <p className="text-xl font-bold">2023-2027</p>
                 </div>
               </div>
             </div>

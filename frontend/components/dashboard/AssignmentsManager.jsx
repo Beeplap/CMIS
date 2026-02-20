@@ -18,33 +18,72 @@ export default function AssignmentsManager({ teacherId }) {
   const [loading, setLoading] = useState(false);
   const [view, setView] = useState("list"); // 'list', 'create', 'grading'
   const [assignments, setAssignments] = useState([]);
-  const [classes, setClasses] = useState([]);
+  const [teachingClasses, setTeachingClasses] = useState([]); // teaching_assignments with batch + subject
   
   // Create Form State
-  const [newAssignment, setNewAssignment] = useState({ title: "", description: "", class_id: "", due_date: "" });
+  const [newAssignment, setNewAssignment] = useState({
+    title: "",
+    description: "",
+    teaching_assignment_id: "",
+    due_at: "",
+  });
   
   // Grading State
   const [selectedAssignment, setSelectedAssignment] = useState(null);
   const [submissions, setSubmissions] = useState([]); // List of students + their submissions
 
   useEffect(() => {
+    if (!teacherId) return;
+    fetchTeachingClasses();
     fetchAssignments();
-    fetchClasses();
   }, [teacherId]);
 
-  const fetchClasses = async () => {
-    const { data } = await supabase.from("classes").select("*").eq("teacher_id", teacherId);
-    setClasses(data || []);
+  // Load subjects+batches this teacher teaches from teaching_assignments
+  const fetchTeachingClasses = async () => {
+    const { data, error } = await supabase
+      .from("teaching_assignments")
+      .select(
+        `
+        id,
+        batch:batches(id, academic_unit, section, course:courses(code, name)),
+        subject:subjects(id, name, code)
+      `,
+      )
+      .eq("teacher_id", teacherId)
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      console.error("Error fetching teaching classes for assignments:", error);
+      setTeachingClasses([]);
+      return;
+    }
+
+    setTeachingClasses(data || []);
   };
 
   const fetchAssignments = async () => {
     setLoading(true);
-    const { data } = await supabase
-        .from("assignments")
-        .select(`*, classes(subject, grade, course, section)`)
-        .eq("teacher_id", teacherId)
-        .order("created_at", { ascending: false });
-    setAssignments(data || []);
+    const { data, error } = await supabase
+      .from("assignments")
+      .select(
+        `
+        *,
+        teaching_assignment:teaching_assignments(
+          id,
+          batch:batches(id, academic_unit, section, course:courses(code, name)),
+          subject:subjects(id, name, code)
+        )
+      `,
+      )
+      .eq("teacher_id", teacherId)
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      console.error("Error fetching assignments:", error);
+      setAssignments([]);
+    } else {
+      setAssignments(data || []);
+    }
     setLoading(false);
   };
 
@@ -52,21 +91,25 @@ export default function AssignmentsManager({ teacherId }) {
       setSelectedAssignment(assignment);
       setLoading(true);
       try {
-        // 1. Get all students in the class
-        // Assuming assignment.classes provides class info. 
-        // We need to fetch students belonging to that class identifier (grade/course).
-        const classIdentifier = assignment.classes.grade || assignment.classes.course;
+        // 1. Get all students in the batch for this teaching assignment
+        const batchId = assignment.teaching_assignment?.batch?.id;
+        if (!batchId) {
+          setSubmissions([]);
+          setView("grading");
+          return;
+        }
+
         const { data: students } = await supabase
-            .from("students")
-            .select("id, full_name, roll")
-            .eq("class", classIdentifier)
-            .order("roll");
+          .from("students")
+          .select("id, full_name, roll")
+          .eq("batch_id", batchId)
+          .order("roll");
         
         // 2. Get submitted work
         const { data: submittedWork } = await supabase
-            .from("submissions")
-            .select("*")
-            .eq("assignment_id", assignment.id);
+          .from("submissions")
+          .select("*")
+          .eq("assignment_id", assignment.id);
         
         // 3. Merge
         const merged = students?.map(student => {
@@ -90,16 +133,24 @@ export default function AssignmentsManager({ teacherId }) {
       e.preventDefault();
       setLoading(true);
       const { error } = await supabase.from("assignments").insert({
-          ...newAssignment,
-          teacher_id: teacherId
+        title: newAssignment.title,
+        description: newAssignment.description || null,
+        teaching_assignment_id: newAssignment.teaching_assignment_id,
+        due_at: newAssignment.due_at,
+        teacher_id: teacherId,
       });
 
       if (!error) {
-          await fetchAssignments();
-          setView("list");
-          setNewAssignment({ title: "", description: "", class_id: "", due_date: "" });
+        await fetchAssignments();
+        setView("list");
+        setNewAssignment({
+          title: "",
+          description: "",
+          teaching_assignment_id: "",
+          due_at: "",
+        });
       } else {
-          alert("Error creating assignment");
+        alert("Error creating assignment");
       }
       setLoading(false);
   };
@@ -164,7 +215,7 @@ export default function AssignmentsManager({ teacherId }) {
                         <CardHeader>
                             <div className="flex justify-between items-start">
                                 <span className="px-2 py-1 bg-blue-100 text-blue-700 text-xs font-bold rounded">
-                                    {assignment.classes?.subject}
+                                    {assignment.teaching_assignment?.subject?.name || "Subject"}
                                 </span>
                                 <ChevronRight className="w-5 h-5 text-gray-400 group-hover:text-purple-600" />
                             </div>
@@ -176,7 +227,10 @@ export default function AssignmentsManager({ teacherId }) {
                             </p>
                             <div className="flex items-center gap-2 text-xs text-gray-400">
                                 <Clock className="w-3 h-3" />
-                                Due: {new Date(assignment.due_date).toLocaleDateString()}
+                                Due:{" "}
+                                {assignment.due_at
+                                  ? new Date(assignment.due_at).toLocaleString()
+                                  : "N/A"}
                             </div>
                         </CardContent>
                     </Card>
@@ -200,19 +254,55 @@ export default function AssignmentsManager({ teacherId }) {
                             <input required className="w-full p-2 border rounded" value={newAssignment.title} onChange={e => setNewAssignment({...newAssignment, title: e.target.value})} />
                         </div>
                         <div>
-                            <label className="block text-sm font-medium mb-1">Target Class</label>
-                            <select required className="w-full p-2 border rounded" value={newAssignment.class_id} onChange={e => setNewAssignment({...newAssignment, class_id: e.target.value})}>
-                                <option value="">Select Class</option>
-                                {classes.map(c => <option key={c.id} value={c.id}>{c.subject} - {c.grade || c.course}</option>)}
-                            </select>
+                          <label className="block text-sm font-medium mb-1">
+                            Target Batch &amp; Subject
+                          </label>
+                          <select
+                            required
+                            className="w-full p-2 border rounded"
+                            value={newAssignment.teaching_assignment_id}
+                            onChange={(e) =>
+                              setNewAssignment({
+                                ...newAssignment,
+                                teaching_assignment_id: e.target.value,
+                              })
+                            }
+                          >
+                            <option value="">Select Subject &amp; Batch</option>
+                            {teachingClasses.map((t) => (
+                              <option key={t.id} value={t.id}>
+                                {t.subject?.name || "Subject"} —{" "}
+                                {t.batch?.course?.code || "Course"}{" "}
+                                {t.batch?.academic_unit
+                                  ? `Sem-${t.batch.academic_unit}`
+                                  : ""}{" "}
+                                {t.batch?.section
+                                  ? `(${t.batch.section})`
+                                  : ""}
+                              </option>
+                            ))}
+                          </select>
                         </div>
                         <div>
                             <label className="block text-sm font-medium mb-1">Description</label>
                             <textarea className="w-full p-2 border rounded" rows={3} value={newAssignment.description} onChange={e => setNewAssignment({...newAssignment, description: e.target.value})} />
                         </div>
                         <div>
-                            <label className="block text-sm font-medium mb-1">Due Date</label>
-                            <input required type="datetime-local" className="w-full p-2 border rounded" value={newAssignment.due_date} onChange={e => setNewAssignment({...newAssignment, due_date: e.target.value})} />
+                            <label className="block text-sm font-medium mb-1">
+                              Due Date &amp; Time
+                            </label>
+                            <input
+                              required
+                              type="datetime-local"
+                              className="w-full p-2 border rounded"
+                              value={newAssignment.due_at}
+                              onChange={(e) =>
+                                setNewAssignment({
+                                  ...newAssignment,
+                                  due_at: e.target.value,
+                                })
+                              }
+                            />
                         </div>
                         <div className="flex justify-end gap-2">
                              <Button type="button" variant="ghost" onClick={() => setView('list')}>Cancel</Button>
@@ -262,15 +352,38 @@ export default function AssignmentsManager({ teacherId }) {
                                             </span>
                                         )}
                                     </td>
-                                    <td className="px-4 py-3">
-                                        {student.submission?.content && <p className="text-xs text-gray-600 mb-1 max-w-xs truncate">"{student.submission.content}"</p>}
-                                        {student.submission?.file_url ? (
-                                            <a href={student.submission.file_url} target="_blank" className="text-blue-600 hover:underline flex items-center gap-1 text-xs">
-                                                <Download className="w-3 h-3" /> Download File
-                                            </a>
-                                        ) : (
-                                            <span className="text-xs text-gray-400">No file</span>
+                                    <td className="px-4 py-3 space-y-1">
+                                        {student.submission?.content && (
+                                          <p className="text-xs text-gray-600 mb-1 max-w-xs truncate">
+                                            "{student.submission.content}"
+                                          </p>
                                         )}
+                                        {/* Detect link either from explicit file_url or inside content */}
+                                        {(() => {
+                                          const content = student.submission?.content || "";
+                                          const urlMatch = content.match(/https?:\/\/\S+/);
+                                          const inferredLink = urlMatch ? urlMatch[0] : null;
+                                          const fileUrl = student.submission?.file_url || inferredLink;
+
+                                          if (!fileUrl) {
+                                            return (
+                                              <span className="text-xs text-gray-400">
+                                                No file or link
+                                              </span>
+                                            );
+                                          }
+
+                                          return (
+                                            <a
+                                              href={fileUrl}
+                                              target="_blank"
+                                              rel="noreferrer"
+                                              className="text-blue-600 hover:underline flex items-center gap-1 text-xs"
+                                            >
+                                              <Download className="w-3 h-3" /> Open Link / File
+                                            </a>
+                                          );
+                                        })()}
                                     </td>
                                     <td className="px-4 py-3">
                                         <div className="flex gap-2 items-center">

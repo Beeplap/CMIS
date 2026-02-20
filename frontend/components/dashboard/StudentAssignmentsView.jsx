@@ -19,36 +19,51 @@ export default function StudentAssignmentsView({ studentId, studentClass }) {
   const [submissionText, setSubmissionText] = useState("");
 
   useEffect(() => {
-    if (studentId && studentClass) fetchAssignments();
-  }, [studentId, studentClass]);
+    if (studentId) fetchAssignments();
+  }, [studentId]);
 
   const fetchAssignments = async () => {
     setLoading(true);
     try {
-      // 1. Fetch assignments for student's class
-      // We need to link classes table ideally, but based on simplified schema:
-      // Assuming we filter assignments by checking if the assignment's class matches student's class
-      // This requires a join or two-step fetch.
-      // Let's assume studentClass is the ID or we search assignments on tables.
-      // Better: fetch assignments linked to classes that match the student's 'class' string (grade/course)
-      
-      const { data: matchedClasses } = await supabase
-        .from('classes')
-        .select('id')
-        .or(`grade.eq.${studentClass},course.eq.${studentClass},subject.eq.${studentClass}`);
-      
-      const classIds = matchedClasses?.map(c => c.id) || [];
-      
-      if (classIds.length === 0) {
-          setAssignments([]);
-          setLoading(false);
-          return;
+      // Fetch the student's batch first
+      const { data: studentRow, error: studentError } = await supabase
+        .from("students")
+        .select("batch_id")
+        .eq("id", studentId)
+        .single();
+
+      if (studentError || !studentRow?.batch_id) {
+        setAssignments([]);
+        setLoading(false);
+        return;
       }
+
+      // Find teaching_assignments (subject+batch) for this student's batch
+      const { data: teachingAssignments, error: taError } = await supabase
+        .from("teaching_assignments")
+        .select("id, subject:subjects(name, code)")
+        .eq("batch_id", studentRow.batch_id);
+
+      if (taError || !teachingAssignments || teachingAssignments.length === 0) {
+        setAssignments([]);
+        setLoading(false);
+        return;
+      }
+
+      const teachingIds = teachingAssignments.map((ta) => ta.id);
 
       const { data: assignmentData, error } = await supabase
         .from("assignments")
-        .select("*, classes(subject)")
-        .in("class_id", classIds)
+        .select(
+          `
+          *,
+          teaching_assignment:teaching_assignments(
+            id,
+            subject:subjects(name, code)
+          )
+        `,
+        )
+        .in("teaching_assignment_id", teachingIds)
         .order("created_at", { ascending: false });
 
       if (error) throw error;
@@ -108,7 +123,7 @@ export default function StudentAssignmentsView({ studentId, studentClass }) {
       <div className="grid grid-cols-1 gap-6">
         {assignments.map((assignment) => {
             const isSubmitted = !!assignment.submission;
-            const isGraded = assignment.submission?.status === 'graded';
+            const isGraded = assignment.submission?.status === "graded";
             const isExpanded = submittingId === assignment.id;
 
             return (
@@ -117,27 +132,37 @@ export default function StudentAssignmentsView({ studentId, studentClass }) {
                         <div className="flex justify-between items-start">
                             <div>
                                 <span className="text-xs font-bold text-blue-600 bg-blue-100 px-2 py-1 rounded uppercase tracking-wide">
-                                    {assignment.classes?.subject || "Assignment"}
+                                    {assignment.teaching_assignment?.subject?.name || "Assignment"}
                                 </span>
                                 <CardTitle className="text-xl mt-2">{assignment.title}</CardTitle>
                             </div>
                             <div className="flex flex-col items-end gap-2">
-                                {isGraded ? (
-                                    <span className="flex items-center gap-1 text-sm font-bold text-green-600 bg-green-100 px-3 py-1 rounded-full">
-                                        <CheckCircle className="w-4 h-4" /> Graded: {assignment.submission.grade}
-                                    </span>
-                                ) : isSubmitted ? (
-                                    <span className="flex items-center gap-1 text-sm font-bold text-blue-600 bg-blue-50 px-3 py-1 rounded-full">
-                                        <CheckCircle className="w-4 h-4" /> Submitted
-                                    </span>
-                                ) : (
-                                    <span className="flex items-center gap-1 text-sm font-bold text-orange-600 bg-orange-50 px-3 py-1 rounded-full">
-                                        <Clock className="w-4 h-4" /> Pending
-                                    </span>
-                                )}
-                                <span className="text-xs text-gray-500">
-                                    Due: {new Date(assignment.due_date).toLocaleDateString()}
+                              {isGraded ? (
+                                <span className="flex items-center gap-1 text-sm font-bold text-green-600 bg-green-100 px-3 py-1 rounded-full">
+                                  <CheckCircle className="w-4 h-4" />{" "}
+                                  {`Graded${
+                                    assignment.submission.grade != null
+                                      ? `: ${assignment.submission.grade}`
+                                      : ""
+                                  }`}
                                 </span>
+                              ) : isSubmitted ? (
+                                <span className="flex items-center gap-1 text-sm font-bold text-blue-600 bg-blue-50 px-3 py-1 rounded-full">
+                                  <CheckCircle className="w-4 h-4" /> Submitted
+                                </span>
+                              ) : (
+                                <span className="flex items-center gap-1 text-sm font-bold text-orange-600 bg-orange-50 px-3 py-1 rounded-full">
+                                  <Clock className="w-4 h-4" /> Pending
+                                </span>
+                              )}
+                              <span className="text-xs text-gray-500">
+                                Due:{" "}
+                                {assignment.due_at
+                                  ? new Date(
+                                      assignment.due_at,
+                                    ).toLocaleString()
+                                  : "N/A"}
+                              </span>
                             </div>
                         </div>
                     </CardHeader>
@@ -175,9 +200,34 @@ export default function StudentAssignmentsView({ studentId, studentClass }) {
                                 )}
                             </div>
                         ) : (
-                            <div className="mt-4 pt-4 border-t flex items-center gap-2 text-sm text-gray-500">
-                                <FileText className="w-4 h-4" /> 
-                                <span>You submitted this on {new Date(assignment.submission.submitted_at).toLocaleDateString()}</span>
+                            <div className="mt-4 pt-4 border-t space-y-2 text-sm text-gray-500">
+                                <div className="flex items-center gap-2">
+                                  <FileText className="w-4 h-4" /> 
+                                  <span>
+                                    You submitted this on{" "}
+                                    {new Date(
+                                      assignment.submission.submitted_at,
+                                    ).toLocaleDateString()}
+                                  </span>
+                                </div>
+                                {(() => {
+                                  const content =
+                                    assignment.submission?.content || "";
+                                  const urlMatch =
+                                    content.match(/https?:\/\/\S+/);
+                                  const link = urlMatch ? urlMatch[0] : null;
+                                  if (!link) return null;
+                                  return (
+                                    <a
+                                      href={link}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      className="inline-flex items-center gap-1 text-xs text-blue-600 hover:underline"
+                                    >
+                                      Open submitted link
+                                    </a>
+                                  );
+                                })()}
                             </div>
                         )}
                     </CardContent>
