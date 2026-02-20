@@ -25,6 +25,11 @@ export default function StudentDashboardPage() {
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState(null);
   const [studentData, setStudentData] = useState(null);
+  const [attendanceSummary, setAttendanceSummary] = useState({
+    total: 0,
+    present: 0,
+    percentage: 0,
+  });
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [currentView, setCurrentView] = useState("dashboard");
@@ -62,6 +67,22 @@ export default function StudentDashboardPage() {
           .single();
 
         setStudentData(student);
+
+        // Fetch overall attendance summary for this student
+        const { data: attendanceData, error: attendanceError } = await supabase
+          .from("attendance")
+          .select("status")
+          .eq("student_id", authUser.id);
+
+        if (!attendanceError && attendanceData) {
+          const total = attendanceData.length;
+          const present = attendanceData.filter(
+            (r) => r.status === "present",
+          ).length;
+          const percentage =
+            total > 0 ? Math.round((present / total) * 100) : 0;
+          setAttendanceSummary({ total, present, percentage });
+        }
       } catch (error) {
         console.error("Error:", error);
       } finally {
@@ -158,10 +179,15 @@ export default function StudentDashboardPage() {
                       Attendance
                     </p>
                     <p className="text-2xl font-bold text-gray-900">
-                      Good
-                      {/* Dynamic value would be better, but 'Good' is a safe placeholder/can be calculated */}
+                      {attendanceSummary.percentage}%
                     </p>
-                    <p className="text-xs text-green-600 mt-1">
+                    <p
+                      className={`text-xs mt-1 ${
+                        attendanceSummary.percentage < 75
+                          ? "text-red-600"
+                          : "text-green-600"
+                      }`}
+                    >
                       Click to view details
                     </p>
                   </div>

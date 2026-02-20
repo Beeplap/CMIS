@@ -202,14 +202,18 @@ export default function AttendanceManager({ teacherId }) {
       const cls = classes.find((c) => c.id === selectedClassId);
       const subjectId = cls?.subjectId || null;
 
-      const updates = Object.entries(attendance).map(([studentId, status]) => ({
-        student_id: studentId,
-        date: selectedDate,
-        status,
-        class_id: selectedClassId,
-        marked_by: teacherId,
-        subject_id: subjectId,
-      }));
+      // Build updates for ALL students in this class, defaulting to "present"
+      const updates = students.map((student) => {
+        const statusForStudent = attendance[student.id] || "present";
+        return {
+          student_id: student.id,
+          date: selectedDate,
+          status: statusForStudent,
+          class_id: selectedClassId,
+          marked_by: teacherId,
+          subject_id: subjectId,
+        };
+      });
 
       if (updates.length > 0) {
          const { error } = await supabase
