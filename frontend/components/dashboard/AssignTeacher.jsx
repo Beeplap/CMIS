@@ -4,9 +4,13 @@ import { Plus, Trash2, UserCheck, BookOpen } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@headlessui/react";
 import { Card, CardContent } from "@/components/ui/card";
+import ConfirmDialog from "@/components/ui/ConfirmDialog";
+import { useToast } from "@/components/ui/Toast";
 
 export default function AssignTeacher({ batches = [] }) {
+  const toast = useToast();
   const [assignments, setAssignments] = useState([]);
+  const [deleteConfirm, setDeleteConfirm] = useState({ open: false, id: null });
   const [teachers, setTeachers] = useState([]);
   const [subjects, setSubjects] = useState([]);
 
@@ -105,7 +109,7 @@ export default function AssignTeacher({ batches = [] }) {
         setNewAssignment({ subject_id: "", teacher_id: "" });
       } else {
         const json = await res.json();
-        alert(json.error || "Failed to assign teacher");
+        toast.error(json.error || "Failed to assign teacher");
       }
     } catch (err) {
       console.error(err);
@@ -114,10 +118,15 @@ export default function AssignTeacher({ batches = [] }) {
     }
   };
 
-  const handleDelete = async (id) => {
-    if (!confirm("Remove this teacher assignment?")) return;
+  const handleDeleteClick = (id) => setDeleteConfirm({ open: true, id });
+
+  const handleDeleteConfirm = async () => {
+    const id = deleteConfirm.id;
+    setDeleteConfirm({ open: false, id: null });
+    if (!id) return;
     await fetch(`/api/teaching-assignments?id=${id}`, { method: "DELETE" });
     fetchAssignments(selectedBatchId);
+    toast.success("Teacher assignment removed.");
   };
 
   return (
@@ -199,7 +208,7 @@ export default function AssignTeacher({ batches = [] }) {
                 variant="ghost"
                 size="sm"
                 className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 text-red-500 hover:text-red-700 hover:bg-red-50"
-                onClick={() => handleDelete(a.id)}
+                onClick={() => handleDeleteClick(a.id)}
               >
                 <Trash2 className="w-4 h-4" />
               </Button>
@@ -294,6 +303,17 @@ export default function AssignTeacher({ batches = [] }) {
           </Dialog.Panel>
         </div>
       </Dialog>
+
+      <ConfirmDialog
+        open={deleteConfirm.open}
+        onClose={() => setDeleteConfirm({ open: false, id: null })}
+        onConfirm={handleDeleteConfirm}
+        title="Remove Assignment"
+        message="Are you sure you want to remove this teacher assignment?"
+        confirmText="Remove"
+        cancelText="Cancel"
+        variant="danger"
+      />
     </div>
   );
 }

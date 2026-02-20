@@ -5,8 +5,10 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Dialog, Transition } from "@headlessui/react";
+import ConfirmDialog from "@/components/ui/ConfirmDialog";
 
 export default function ManageCurriculum() {
+  const [deleteSubjectConfirm, setDeleteSubjectConfirm] = useState({ open: false, subject: null });
   const [courses, setCourses] = useState([]);
   const [subjects, setSubjects] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -209,12 +211,9 @@ const handleAddSubjectSubmit = async (closeAfter = false) => {
                                                 <span className="font-medium">{sub.name}</span>
                                                 <span className="text-xs text-gray-400 ml-2">({sub.code})</span>
                                             </div>
-                                            <Button variant="ghost" size="sm" className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 text-red-500" onClick={async(e) => {
+                                            <Button variant="ghost" size="sm" className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 text-red-500" onClick={(e) => {
                                                 e.stopPropagation();
-                                                if(confirm("Delete subject?")) {
-                                                    await fetch("/api/subjects", { method: "DELETE", body: JSON.stringify({ id: sub.id }) });
-                                                    fetchCoursesAndSubjects();
-                                                }
+                                                setDeleteSubjectConfirm({ open: true, subject: sub });
                                             }}>
                                                 <Trash2 className="w-3 h-3"/>
                                             </Button>
@@ -348,6 +347,22 @@ const handleAddSubjectSubmit = async (closeAfter = false) => {
         </Dialog>
       </Transition>
 
+      <ConfirmDialog
+        open={deleteSubjectConfirm.open}
+        onClose={() => setDeleteSubjectConfirm({ open: false, subject: null })}
+        onConfirm={async () => {
+          const sub = deleteSubjectConfirm.subject;
+          setDeleteSubjectConfirm({ open: false, subject: null });
+          if (!sub) return;
+          await fetch("/api/subjects", { method: "DELETE", body: JSON.stringify({ id: sub.id }) });
+          fetchCoursesAndSubjects();
+        }}
+        title="Delete Subject"
+        message={`Are you sure you want to delete "${deleteSubjectConfirm.subject?.name}"?`}
+        confirmText="Delete"
+        cancelText="Cancel"
+        variant="danger"
+      />
     </div>
   );
 }

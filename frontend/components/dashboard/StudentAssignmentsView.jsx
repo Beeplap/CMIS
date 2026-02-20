@@ -3,6 +3,7 @@ import React, { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { useToast } from "@/components/ui/Toast";
 import {
   BookOpen,
   CheckCircle,
@@ -13,6 +14,7 @@ import {
 } from "lucide-react";
 
 export default function StudentAssignmentsView({ studentId, batchId }) {
+  const toast = useToast();
   const [loading, setLoading] = useState(true);
   const [assignments, setAssignments] = useState([]);
   const [submittingId, setSubmittingId] = useState(null);
@@ -98,7 +100,7 @@ export default function StudentAssignmentsView({ studentId, batchId }) {
 
   const handleSubmit = async (assignmentId) => {
     if (!submissionText.trim()) {
-      alert("Please enter your submission (text or link) before submitting.");
+      toast.error("Please enter your submission (text or link) before submitting.");
       return;
     }
 
@@ -131,10 +133,10 @@ export default function StudentAssignmentsView({ studentId, batchId }) {
       );
       setSubmissionText("");
       setSubmittingId(null);
-      alert("Assignment submitted successfully!");
+      toast.success("Assignment submitted successfully!");
     } catch (err) {
       console.error("Submission error:", err);
-      alert(`Failed to submit: ${err.message || "Please try again."}`);
+      toast.error(`Failed to submit: ${err.message || "Please try again."}`);
     } finally {
       setSubmitting(false);
     }

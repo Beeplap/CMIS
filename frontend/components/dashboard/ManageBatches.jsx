@@ -4,10 +4,14 @@ import { Plus, Trash2, Calendar, Layers } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Dialog } from "@headlessui/react";
+import ConfirmDialog from "@/components/ui/ConfirmDialog";
+import { useToast } from "@/components/ui/Toast";
 import BatchDetailsModal from "./BatchDetailsModal";
 
 export default function ManageBatches({ batches = [], onChange }) {
+  const toast = useToast();
   const [courses, setCourses] = useState([]);
+  const [deleteConfirm, setDeleteConfirm] = useState({ open: false, id: null });
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [selectedBatch, setSelectedBatch] = useState(null);
@@ -53,7 +57,7 @@ export default function ManageBatches({ batches = [], onChange }) {
         setNewBatch((prev) => ({ ...prev, course_id: "", academic_unit: "" }));
       } else {
         const json = await res.json();
-        alert(json.error || "Failed to create batch");
+        toast.error(json.error || "Failed to create batch");
       }
     } catch (error) {
       console.error("Error creating batch:", error);
@@ -62,19 +66,23 @@ export default function ManageBatches({ batches = [], onChange }) {
     }
   };
 
-  const handleDeleteBatch = async (id) => {
-    if (
-      !confirm(
-        "Are you sure? This will delete all assignments and student links for this batch.",
-      )
-    )
-      return;
+  const handleDeleteClick = (id) => setDeleteConfirm({ open: true, id });
+
+  const handleDeleteConfirm = async () => {
+    const id = deleteConfirm.id;
+    setDeleteConfirm({ open: false, id: null });
+    if (!id) return;
     try {
       const res = await fetch(`/api/batches?id=${id}`, { method: "DELETE" });
-      if (res.ok) onChange?.();
-      else alert("Failed to delete batch");
+      if (res.ok) {
+        onChange?.();
+        toast.success("Batch deleted successfully.");
+      } else {
+        toast.error("Failed to delete batch");
+      }
     } catch (error) {
       console.error("Error deleting batch:", error);
+      toast.error("Failed to delete batch");
     }
   };
 
@@ -159,7 +167,7 @@ export default function ManageBatches({ batches = [], onChange }) {
               className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 text-red-500 hover:text-red-700 hover:bg-red-50"
               onClick={(e) => {
                 e.stopPropagation(); // Prevent opening modal
-                handleDeleteBatch(batch.id);
+                handleDeleteClick(batch.id);
               }}
             >
               <Trash2 className="w-4 h-4" />
@@ -298,6 +306,17 @@ export default function ManageBatches({ batches = [], onChange }) {
           onClose={() => setSelectedBatch(null)}
         />
       )}
+
+      <ConfirmDialog
+        open={deleteConfirm.open}
+        onClose={() => setDeleteConfirm({ open: false, id: null })}
+        onConfirm={handleDeleteConfirm}
+        title="Delete Batch"
+        message="Are you sure? This will delete all assignments and student links for this batch."
+        confirmText="Delete"
+        cancelText="Cancel"
+        variant="danger"
+      />
     </div>
   );
 }

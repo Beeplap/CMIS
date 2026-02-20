@@ -3,6 +3,7 @@ import React, { useEffect, useMemo, useCallback, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { useToast } from "@/components/ui/Toast";
 import {
   Calendar,
   CheckCircle,
@@ -17,6 +18,7 @@ import {
 } from "lucide-react";
 
 export default function AttendanceManager({ teacherId }) {
+  const toast = useToast();
   const [loading, setLoading] = useState(false);
   const [classes, setClasses] = useState([]); // derived from teaching_assignments
   const [selectedClassId, setSelectedClassId] = useState(""); // teaching_assignments.id
@@ -247,7 +249,7 @@ export default function AttendanceManager({ teacherId }) {
     try {
       const cls = classes.find((c) => c.id === selectedClassId);
       if (!cls) {
-        alert("Error: Class not found. Please refresh the page.");
+        toast.error("Error: Class not found. Please refresh the page.");
         setLoading(false);
         return;
       }
@@ -273,13 +275,13 @@ export default function AttendanceManager({ teacherId }) {
            .upsert(updates, { onConflict: "student_id, date, class_id" });
          
          if (error) throw error;
-         alert("Attendance saved successfully!");
+         toast.success("Attendance saved successfully!");
          // Optionally refresh to show saved state
          await fetchDailyData();
       }
     } catch (error) {
       console.error("Error saving attendance:", error);
-      alert(`Failed to save attendance: ${error.message || "Please try again."}`);
+      toast.error(`Failed to save attendance: ${error.message || "Please try again."}`);
     } finally {
       setLoading(false);
     }

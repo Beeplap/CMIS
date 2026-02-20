@@ -4,10 +4,12 @@ import { supabase } from "@/lib/supabaseClient";
 import { useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { useToast } from "@/components/ui/Toast";
 import { User, LogOut, Key } from "lucide-react";
 
 export default function StudentProfile({ studentData, user }) {
   const router = useRouter();
+  const toast = useToast();
   const [isEditing, setIsEditing] = useState(false);
   const [formData, setFormData] = useState({
     phone_number: studentData?.phone_number || "",
@@ -26,10 +28,7 @@ export default function StudentProfile({ studentData, user }) {
   };
 
   const handleChangePassword = () => {
-    // In a real app, this would open a modal or redirect
-    alert(
-      "Password change functionality would be implemented here (e.g., /settings/security).",
-    );
+    toast.info("Password change is available in profile settings.");
   };
 
   const handleUpdateProfile = async () => {
@@ -49,11 +48,11 @@ export default function StudentProfile({ studentData, user }) {
         .eq("id", user.id);
 
       if (error) throw error;
-      alert("Profile updated successfully!");
+      toast.success("Profile updated successfully!");
       setIsEditing(false);
       window.location.reload(); // Reload to refresh data
     } catch (error) {
-      alert("Error updating profile: " + error.message);
+      toast.error("Error updating profile: " + error.message);
     }
   };
 

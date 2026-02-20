@@ -3,6 +3,7 @@ import React, { useState, useEffect } from "react";
 import { Dialog, Tab } from "@headlessui/react";
 import { User, BookOpen, UserPlus, X, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useToast } from "@/components/ui/Toast";
 import { supabase } from "@/lib/supabaseClient";
 
 function classNames(...classes) {
@@ -10,6 +11,7 @@ function classNames(...classes) {
 }
 
 export default function BatchDetailsModal({ batch, isOpen, onClose }) {
+  const toast = useToast();
   const [students, setStudents] = useState([]);
   const [teachers, setTeachers] = useState([]);
   const [unassignedStudents, setUnassignedStudents] = useState([]);
@@ -92,7 +94,7 @@ export default function BatchDetailsModal({ batch, isOpen, onClose }) {
         setAssignMode(false);
         setSelectedStudents(new Set());
       } else {
-        alert("Failed to assign students");
+        toast.error("Failed to assign students");
       }
     } catch (err) {
       console.error("Error assigning:", err);

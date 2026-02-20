@@ -3,6 +3,8 @@ import React, { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import ConfirmDialog from "@/components/ui/ConfirmDialog";
+import { useToast } from "@/components/ui/Toast";
 import {
   Bell,
   Plus,
@@ -20,6 +22,7 @@ import {
 } from "lucide-react";
 
 export default function AdminNoticesManager({ userId }) {
+  const toast = useToast();
   const [notices, setNotices] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -27,6 +30,7 @@ export default function AdminNoticesManager({ userId }) {
   const [batches, setBatches] = useState([]);
   const [courses, setCourses] = useState([]);
   const [selectedNoticeReads, setSelectedNoticeReads] = useState(null);
+  const [deleteConfirm, setDeleteConfirm] = useState({ open: false, id: null });
 
   const [submitting, setSubmitting] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -93,14 +97,14 @@ export default function AdminNoticesManager({ userId }) {
         await fetchNotices();
         resetForm();
         setShowCreateModal(false);
-        alert("Notice created successfully!");
+        toast.success("Notice created successfully!");
       } else {
         const error = await res.json();
-        alert(error.error || "Failed to create notice");
+        toast.error(error.error || "Failed to create notice");
       }
     } catch (error) {
       console.error("Error creating notice:", error);
-      alert("Failed to create notice");
+      toast.error("Failed to create notice");
     } finally {
       setSubmitting(false);
     }
@@ -124,37 +128,39 @@ export default function AdminNoticesManager({ userId }) {
         await fetchNotices();
         resetForm();
         setEditingNotice(null);
-        alert("Notice updated successfully!");
+        toast.success("Notice updated successfully!");
       } else {
         const error = await res.json();
-        alert(error.error || "Failed to update notice");
+        toast.error(error.error || "Failed to update notice");
       }
     } catch (error) {
       console.error("Error updating notice:", error);
-      alert("Failed to update notice");
+      toast.error("Failed to update notice");
     } finally {
       setSubmitting(false);
     }
   };
 
-  const handleDelete = async (id) => {
-    if (!confirm("Are you sure you want to delete this notice?")) return;
+  const handleDeleteClick = (id) => setDeleteConfirm({ open: true, id });
 
+  const handleDeleteConfirm = async () => {
+    const id = deleteConfirm.id;
+    setDeleteConfirm({ open: false, id: null });
+    if (!id) return;
     try {
       const res = await fetch(`/api/notices/${id}?user_id=${userId}`, {
         method: "DELETE",
       });
-
       if (res.ok) {
         await fetchNotices();
-        alert("Notice deleted successfully!");
+        toast.success("Notice deleted successfully!");
       } else {
         const error = await res.json();
-        alert(error.error || "Failed to delete notice");
+        toast.error(error.error || "Failed to delete notice");
       }
     } catch (error) {
       console.error("Error deleting notice:", error);
-      alert("Failed to delete notice");
+      toast.error("Failed to delete notice");
     }
   };
 
@@ -330,7 +336,7 @@ export default function AdminNoticesManager({ userId }) {
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() => handleDelete(notice.id)}
+                    onClick={() => handleDeleteClick(notice.id)}
                     className="text-red-600"
                   >
                     <Trash2 className="w-4 h-4" />
@@ -633,6 +639,17 @@ export default function AdminNoticesManager({ userId }) {
           </Card>
         </div>
       )}
+
+      <ConfirmDialog
+        open={deleteConfirm.open}
+        onClose={() => setDeleteConfirm({ open: false, id: null })}
+        onConfirm={handleDeleteConfirm}
+        title="Delete Notice"
+        message="Are you sure you want to delete this notice? This cannot be undone."
+        confirmText="Delete"
+        cancelText="Cancel"
+        variant="danger"
+      />
     </div>
   );
 }

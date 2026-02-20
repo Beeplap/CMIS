@@ -163,14 +163,14 @@ function NoticeCard({ notice, onMarkAsRead }) {
       onClick={handleMarkAsRead}
     >
       <CardHeader className="pb-3">
-        <div className="flex justify-between items-start">
-          <div className="flex-1">
+        <div className="flex items-start w-full gap-3">
+          <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-2">
               {notice.is_pinned && (
-                <Pin className="w-4 h-4 text-purple-600" />
+                <Pin className="w-4 h-4 text-purple-600 shrink-0" />
               )}
               {!isRead && (
-                <span className="w-2 h-2 bg-blue-500 rounded-full"></span>
+                <span className="w-2 h-2 bg-blue-500 rounded-full shrink-0"></span>
               )}
               <CardTitle className="text-lg font-semibold text-gray-900">
                 {notice.title}
@@ -191,7 +191,7 @@ function NoticeCard({ notice, onMarkAsRead }) {
               )}
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="shrink-0 ml-auto self-center">
             {isRead ? (
               <CheckCircle className="w-5 h-5 text-green-600" title="Read" />
             ) : (

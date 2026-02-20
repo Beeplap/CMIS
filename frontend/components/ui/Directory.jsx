@@ -2,6 +2,8 @@
 import React, { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import ProtectedRoute from "@/components/ProtectedRoute";
+import ConfirmDialog from "@/components/ui/ConfirmDialog";
+import { useToast } from "@/components/ui/Toast";
 import { supabase } from "@/lib/supabaseClient";
 
 /**
@@ -11,6 +13,8 @@ import { supabase } from "@/lib/supabaseClient";
  * @param {string} description - Page description
  */
 export default function Directory({ type = "teacher", title, description }) {
+  const toast = useToast();
+  const [deleteConfirm, setDeleteConfirm] = useState({ open: false, id: null });
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -69,7 +73,7 @@ export default function Directory({ type = "teacher", title, description }) {
       setItems(filtered);
     } catch (error) {
       console.error(`Error fetching ${type}s:`, error);
-      alert(`Failed to load ${type}s`);
+      toast.error(`Failed to load ${type}s`);
     } finally {
       setLoading(false);
     }
@@ -83,27 +87,28 @@ export default function Directory({ type = "teacher", title, description }) {
     ? []
     : Array.from(new Set(items.map((s) => s.section).filter(Boolean))).sort();
 
-  const handleDelete = async (id) => {
-    if (!confirm(`Delete this ${type}? This will delete from all tables.`))
-      return;
+  const handleDeleteClick = (id) => setDeleteConfirm({ open: true, id });
+
+  const handleDeleteConfirm = async () => {
+    const id = deleteConfirm.id;
+    setDeleteConfirm({ open: false, id: null });
+    if (!id) return;
     try {
       const response = await fetch("/api/delete-user", {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id, role: type }),
       });
-
       const result = await response.json();
       if (!response.ok) {
-        alert(`Error: ${result.error || "Unknown error"}`);
+        toast.error(result.error || "Unknown error");
         return;
       }
-
       fetchItems();
-      alert(`${type.charAt(0).toUpperCase() + type.slice(1)} deleted successfully`);
+      toast.success(`${type.charAt(0).toUpperCase() + type.slice(1)} deleted successfully`);
     } catch (error) {
       console.error(`Error deleting ${type}:`, error);
-      alert(`Error: ${error.message}`);
+      toast.error(error.message);
     }
   };
 

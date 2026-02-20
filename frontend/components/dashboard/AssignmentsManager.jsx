@@ -3,6 +3,7 @@ import React, { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { useToast } from "@/components/ui/Toast";
 import { 
   BookOpen, 
   Plus, 
@@ -15,6 +16,7 @@ import {
 } from "lucide-react";
 
 export default function AssignmentsManager({ teacherId }) {
+  const toast = useToast();
   const [loading, setLoading] = useState(false);
   const [view, setView] = useState("list"); // 'list', 'create', 'grading'
   const [assignments, setAssignments] = useState([]);
@@ -162,7 +164,7 @@ export default function AssignmentsManager({ teacherId }) {
           due_at: "",
         });
       } else {
-        alert("Error creating assignment");
+        toast.error("Error creating assignment");
       }
       setLoading(false);
   };
@@ -184,7 +186,7 @@ export default function AssignmentsManager({ teacherId }) {
         // Only allow grading if there's a submission (can't grade work that wasn't submitted)
         const studentSubmission = submissions.find(s => s.id === studentId);
         if (!studentSubmission?.submission) {
-          alert("Cannot grade: Student has not submitted this assignment yet.");
+          toast.error("Cannot grade: Student has not submitted this assignment yet.");
           return;
         }
 
@@ -224,7 +226,7 @@ export default function AssignmentsManager({ teacherId }) {
 
       } catch (err) {
           console.error("Grading error:", err);
-          alert("Failed to save grade. Please try again.");
+          toast.error("Failed to save grade. Please try again.");
       }
   };
 

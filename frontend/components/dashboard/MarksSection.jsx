@@ -1,11 +1,13 @@
 "use client";
 import React, { useState, useEffect } from "react";
+import { useToast } from "@/components/ui/Toast";
 import { supabase } from "@/lib/supabaseClient";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Save, AlertCircle } from "lucide-react";
 
 export default function MarksSection({ teacherId }) {
+  const toast = useToast();
   const [loading, setLoading] = useState(false);
   const [classes, setClasses] = useState([]);
   const [selectedClass, setSelectedClass] = useState("");
@@ -105,10 +107,10 @@ export default function MarksSection({ teacherId }) {
         .upsert(updates, { onConflict: "student_id, class_id, exam_type" });
 
       if (error) throw error;
-      alert("Marks saved successfully!");
+      toast.success("Marks saved successfully!");
     } catch (error) {
       console.error("Error saving marks:", error);
-      alert("Failed to save marks.");
+      toast.error("Failed to save marks.");
     } finally {
       setLoading(false);
     }
