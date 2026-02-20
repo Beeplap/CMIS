@@ -16,8 +16,8 @@ import {
 
 export default function AttendanceManager({ teacherId }) {
   const [loading, setLoading] = useState(false);
-  const [classes, setClasses] = useState([]);
-  const [selectedClassId, setSelectedClassId] = useState("");
+  const [classes, setClasses] = useState([]); // derived from teaching_assignments
+  const [selectedClassId, setSelectedClassId] = useState(""); // teaching_assignments.id
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split("T")[0]);
   const [students, setStudents] = useState([]);
   const [attendance, setAttendance] = useState({}); // { student_id: 'present' | 'absent' | 'late' }
@@ -25,7 +25,9 @@ export default function AttendanceManager({ teacherId }) {
   const [historyData, setHistoryData] = useState([]);
 
   useEffect(() => {
-    fetchClasses();
+    if (teacherId) {
+      fetchClasses();
+    }
   }, [teacherId]);
 
   useEffect(() => {
@@ -38,29 +40,65 @@ export default function AttendanceManager({ teacherId }) {
     }
   }, [selectedClassId, selectedDate, viewMode]);
 
+  // Load "classes" based on teaching assignments (subject + batch) for this teacher
   const fetchClasses = async () => {
-    const { data } = await supabase
-      .from("classes")
-      .select("*")
-      .eq("teacher_id", teacherId);
-    setClasses(data || []);
+    const { data, error } = await supabase
+      .from("teaching_assignments")
+      .select(
+        `
+        id,
+        batch:batches(id, academic_unit, section, course:courses(code, name)),
+        subject:subjects(id, name, code)
+      `,
+      )
+      .eq("teacher_id", teacherId)
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      console.error(
+        "Error fetching teacher classes from teaching_assignments:",
+        error,
+      );
+      setClasses([]);
+      return;
+    }
+
+    const mapped =
+      data?.map((assignment) => ({
+        id: assignment.id, // will be used as class_id in attendance
+        subjectId: assignment.subject?.id,
+        subjectName: assignment.subject?.name || "Unknown Subject",
+        subjectCode: assignment.subject?.code,
+        batchId: assignment.batch?.id,
+        courseCode: assignment.batch?.course?.code || "Unknown Course",
+        academicUnit: assignment.batch?.academic_unit || "",
+        section: assignment.batch?.section || "",
+      })) || [];
+
+    setClasses(mapped);
+
+    // Auto-select the first class for convenience
+    if (mapped.length > 0 && !selectedClassId) {
+      setSelectedClassId(mapped[0].id);
+    }
   };
 
   const fetchDailyData = async () => {
     setLoading(true);
     try {
-      // 1. Get Class Details
-      const cls = classes.find(c => c.id === selectedClassId);
-      if (!cls) return;
+      // 1. Get selected assignment (class)
+      const cls = classes.find((c) => c.id === selectedClassId);
+      if (!cls || !cls.batchId) {
+        setStudents([]);
+        setAttendance({});
+        return;
+      }
 
-      // 2. Fetch Students
-      // Constructing identifier: "BCA Sem-1" or "BBS Year-1"
-      const classIdentifier = `${cls.course} ${cls.course === 'BCA' ? 'Sem' : 'Year'}-${cls.semester}`; 
-      
+      // 2. Fetch students from the assigned batch
       const { data: studentsData } = await supabase
         .from("students")
         .select("*")
-        .eq("class", classIdentifier)
+        .eq("batch_id", cls.batchId)
         .order("roll", { ascending: true });
 
       setStudents(studentsData || []);
@@ -73,7 +111,7 @@ export default function AttendanceManager({ teacherId }) {
           .select("*")
           .in("student_id", studentIds)
           .eq("date", selectedDate)
-          .eq("class_id", selectedClassId); // Filter by specific class
+          .eq("class_id", selectedClassId); // class_id references teaching_assignments.id
 
         const attendanceMap = {};
         attendanceData?.forEach(r => {
@@ -91,15 +129,18 @@ export default function AttendanceManager({ teacherId }) {
   const fetchHistoryData = async () => {
     setLoading(true);
     try {
-        const cls = classes.find(c => c.id === selectedClassId);
-        if (!cls) return;
-        const classIdentifier = `${cls.course} ${cls.course === 'BCA' ? 'Sem' : 'Year'}-${cls.semester}`;
+        const cls = classes.find((c) => c.id === selectedClassId);
+        if (!cls || !cls.batchId) {
+          setHistoryData([]);
+          setLoading(false);
+          return;
+        }
 
         // Fetch students to report on
         const { data: studentsData } = await supabase
             .from("students")
             .select("id, full_name, roll")
-            .eq("class", classIdentifier)
+            .eq("batch_id", cls.batchId)
             .order("roll", { ascending: true });
         
         if (!studentsData || studentsData.length === 0) {
@@ -123,7 +164,7 @@ export default function AttendanceManager({ teacherId }) {
         const history = studentsData.map(student => {
             const records = allAttendance?.filter(r => r.student_id === student.id) || [];
             const total = records.length;
-            const present = records.filter(r => r.status === 'present').length;
+            const present = records.filter(r => r.status === "present").length;
             const percentage = total > 0 ? Math.round((present / total) * 100) : 0;
             
             return {
@@ -146,24 +187,28 @@ export default function AttendanceManager({ teacherId }) {
 
   const toggleStatus = (studentId, currentStatus) => {
     const nextStatus = {
-        'present': 'absent',
-        'absent': 'late',
-        'late': 'present',
-        undefined: 'present'
-    }[currentStatus] || 'present';
+      present: "absent",
+      absent: "late", // use 'late' in DB but treat as "On Leave" in UI
+      late: "present",
+      undefined: "present",
+    }[currentStatus] || "present";
 
-    setAttendance(prev => ({ ...prev, [studentId]: nextStatus }));
+    setAttendance((prev) => ({ ...prev, [studentId]: nextStatus }));
   };
 
   const handleSave = async () => {
     setLoading(true);
     try {
+      const cls = classes.find((c) => c.id === selectedClassId);
+      const subjectId = cls?.subjectId || null;
+
       const updates = Object.entries(attendance).map(([studentId, status]) => ({
         student_id: studentId,
         date: selectedDate,
-        status: status,
+        status,
         class_id: selectedClassId,
-        marked_by: teacherId
+        marked_by: teacherId,
+        subject_id: subjectId,
       }));
 
       if (updates.length > 0) {
@@ -220,9 +265,11 @@ export default function AttendanceManager({ teacherId }) {
                 onChange={(e) => setSelectedClassId(e.target.value)}
               >
                 <option value="">-- Select Class --</option>
-                {classes.map(c => (
+                {classes.map((c) => (
                   <option key={c.id} value={c.id}>
-                    {c.subject} - {c.course} {c.course === 'BCA' ? 'Sem' : 'Year'}-{c.semester} {c.section ? `(${c.section})` : ''}
+                    {c.subjectName} - {c.courseCode}{" "}
+                    {c.academicUnit ? `Sem-${c.academicUnit}` : ""}{" "}
+                    {c.section ? `(${c.section})` : ""}
                   </option>
                 ))}
               </select>
@@ -245,7 +292,13 @@ export default function AttendanceManager({ teacherId }) {
             <div className="space-y-4">
                  <div className="flex justify-between items-center mb-2">
                     <p className="text-sm text-gray-500">
-                        Click on status to toggle: <span className="text-green-600 font-bold">Present</span> → <span className="text-red-500 font-bold">Absent</span> → <span className="text-yellow-500 font-bold">Late</span>
+                        Click on status to toggle:{" "}
+                        <span className="text-green-600 font-bold">Present</span>{" "}
+                        → <span className="text-red-500 font-bold">Absent</span>{" "}
+                        →{" "}
+                        <span className="text-yellow-500 font-bold">
+                          On Leave
+                        </span>
                     </p>
                     <Button onClick={handleSave} disabled={loading || students.length === 0} className="bg-purple-600 hover:bg-purple-700 text-white">
                         <Save className="w-4 h-4 mr-2" />
@@ -276,10 +329,10 @@ export default function AttendanceManager({ teacherId }) {
                                                     px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wide w-24 transition-all
                                                     ${status === 'present' ? 'bg-green-100 text-green-700 hover:bg-green-200' : ''}
                                                     ${status === 'absent' ? 'bg-red-100 text-red-700 hover:bg-red-200' : ''}
-                                                    ${status === 'late' ? 'bg-yellow-100 text-yellow-700 hover:bg-yellow-200' : ''}
+                                                    ${status === "late" ? "bg-yellow-100 text-yellow-700 hover:bg-yellow-200" : ""}
                                                 `}
                                             >
-                                                {status}
+                                                {status === "late" ? "on leave" : status}
                                             </button>
                                         </td>
                                     </tr>
