@@ -64,11 +64,15 @@ export default function AssignTeacher({ batches = [] }) {
 
   const fetchSubjectsForBatch = async (batchId) => {
     const batch = batches.find((b) => b.id === batchId);
-    if (!batch || !batch.course) return;
+    if (!batch) return;
 
-    // Fetch subjects for this course & academic unit
+    // Prefer related course.id if loaded, otherwise fall back to batch.course_id
+    const courseId = batch.course?.id || batch.course_id;
+    if (!courseId) return;
+
+    // Fetch subjects for this course & academic unit (semester/year)
     const res = await fetch(
-      `/api/subjects?course_id=${batch.course.id}&semester=${batch.academic_unit}`,
+      `/api/subjects?course_id=${courseId}&semester=${batch.academic_unit}`,
     );
     if (res.ok) {
       const data = await res.json();
