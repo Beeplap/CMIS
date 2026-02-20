@@ -23,6 +23,7 @@ import Sidebar from "@/components/ui/Sidebar";
 // Imported Components
 import MarksSection from "@/components/dashboard/MarksSection";
 import StudentPerformance from "@/components/dashboard/StudentPerformance";
+import TeacherNoticesManager from "@/components/dashboard/TeacherNoticesManager";
 import NoticesBoard from "@/components/dashboard/NoticesBoard";
 import TeacherProfile from "@/components/dashboard/TeacherProfile";
 import AttendanceManager from "@/components/dashboard/AttendanceManager";
@@ -418,7 +419,7 @@ export default function TeacherDashboardPage() {
                         </CardTitle>
                       </CardHeader>
                       <CardContent className="max-h-[400px] overflow-y-auto">
-                        <NoticesBoard role="teacher" />
+                        <NoticesBoard role="teacher" userId={userId} limit={5} />
                       </CardContent>
                     </Card>
                   </div>
@@ -440,7 +441,9 @@ export default function TeacherDashboardPage() {
               <StudentPerformance teacherId={userId} />
             )}
 
-            {currentView === "notices" && <NoticesBoard role="teacher" />}
+            {currentView === "notices" && (
+              <TeacherNoticesManager teacherId={userId} />
+            )}
 
             {currentView === "profile" && (
               <TeacherProfile

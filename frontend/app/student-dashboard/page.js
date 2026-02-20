@@ -269,7 +269,9 @@ export default function StudentDashboardPage() {
 
         {currentView === "marks" && <StudentMarksView studentId={user?.id} />}
 
-        {currentView === "notices" && <StudentNoticesView />}
+        {currentView === "notices" && (
+          <StudentNoticesView studentId={user?.id} />
+        )}
 
         {currentView === "profile" && (
           <StudentProfile studentData={studentData} user={user} />

@@ -36,11 +36,13 @@ import ManageCurriculum from "@/components/ui/ManageCurriculum";
 import ManageBatches from "@/components/dashboard/ManageBatches";
 import AssignTeacher from "@/components/dashboard/AssignTeacher";
 import StudentAttendanceView from "@/components/dashboard/StudentAttendanceView";
+import AdminNoticesManager from "@/components/dashboard/AdminNoticesManager";
 
 export default function AdminPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [userRole, setUserRole] = useState(null);
+  const [userId, setUserId] = useState(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [currentView, setCurrentView] = useState("dashboard");
@@ -95,6 +97,7 @@ export default function AdminPage() {
     }
 
     setUserRole("admin");
+    setUserId(user.id);
     setLoading(false);
     fetchAllData();
   };
@@ -129,12 +132,7 @@ export default function AdminPage() {
       .eq("is_active", true);
     if (batchesData) setBatches(batchesData);
 
-    // Fetch Notices
-    const { data: noticesData } = await supabase
-      .from("notices")
-      .select("*")
-      .order("date", { ascending: false });
-    if (noticesData) setNotices(noticesData);
+    // Notices are now managed via AdminNoticesManager component
 
     // Fetch Fees
     const { data: feesData } = await supabase
@@ -301,31 +299,6 @@ export default function AdminPage() {
     }
   };
 
-  const handleAddNotice = async () => {
-    const title = prompt("Enter Notice Title:");
-    if (!title) return;
-
-    const target = prompt(
-      "Enter Target (All Students / Teachers):",
-      "All Students",
-    );
-
-    const { error } = await supabase
-      .from("notices")
-      .insert([
-        { title, target, date: new Date().toISOString().split("T")[0] },
-      ]);
-
-    if (error) alert("Error adding notice");
-    else fetchAllData();
-  };
-
-  const handleDeleteNotice = async (id) => {
-    if (!confirm("Delete this notice?")) return;
-    const { error } = await supabase.from("notices").delete().eq("id", id);
-    if (error) alert("Error deleting notice");
-    else fetchAllData();
-  };
 
   // --- Render Helpers ---
 
@@ -1519,40 +1492,10 @@ export default function AdminPage() {
   );
 
   // 8. Notices Component
-  const renderNotices = () => (
-    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-      <div className="flex justify-between items-center">
-        <h2 className="text-2xl font-bold">Notices & Announcements</h2>
-        <Button className="bg-purple-600" onClick={handleAddNotice}>
-          <Plus className="w-4 h-4 mr-2" /> Create Notice
-        </Button>
-      </div>
-      <Card>
-        <CardContent className="p-0">
-          {notices.map((n) => (
-            <div
-              key={n.id}
-              className="p-4 border-b last:border-0 hover:bg-gray-50 flex justify-between items-center"
-            >
-              <div>
-                <h4 className="font-semibold text-gray-900">{n.title}</h4>
-                <p className="text-sm text-gray-500">
-                  Target: {n.target} • {n.date}
-                </p>
-              </div>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => handleDeleteNotice(n.id)}
-              >
-                <Trash2 className="w-4 h-4 text-red-500" />
-              </Button>
-            </div>
-          ))}
-        </CardContent>
-      </Card>
-    </div>
-  );
+  const renderNotices = () => {
+    if (!userId) return null;
+    return <AdminNoticesManager userId={userId} />;
+  };
 
   // --- Main Render ---
   if (loading)
