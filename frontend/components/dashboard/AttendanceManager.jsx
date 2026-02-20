@@ -1,17 +1,19 @@
 "use client";
-import React, { useState, useEffect } from "react";
+import React, { useEffect, useMemo, useCallback, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { 
-  Calendar, 
-  CheckCircle, 
-  XCircle, 
-  Clock, 
-  AlertTriangle, 
-  Save, 
+import {
+  Calendar,
+  CheckCircle,
+  ChevronLeft,
+  ChevronRight,
+  Clock,
   History,
-  UserCheck 
+  Save,
+  UserCheck,
+  Users,
+  XCircle,
 } from "lucide-react";
 
 export default function AttendanceManager({ teacherId }) {
@@ -21,8 +23,9 @@ export default function AttendanceManager({ teacherId }) {
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split("T")[0]);
   const [students, setStudents] = useState([]);
   const [attendance, setAttendance] = useState({}); // { student_id: 'present' | 'absent' | 'late' }
-  const [viewMode, setViewMode] = useState("daily"); // 'daily' | 'history'
+  const [viewMode, setViewMode] = useState("daily"); // 'daily' | 'quick' | 'history'
   const [historyData, setHistoryData] = useState([]);
+  const [currentIndex, setCurrentIndex] = useState(0);
 
   useEffect(() => {
     if (teacherId) {
@@ -32,13 +35,27 @@ export default function AttendanceManager({ teacherId }) {
 
   useEffect(() => {
     if (selectedClassId) {
-      if (viewMode === "daily") {
-        fetchDailyData();
-      } else {
+      if (viewMode === "history") {
         fetchHistoryData();
+      } else {
+        // Both Daily and Quick need the same "daily" data
+        fetchDailyData();
       }
     }
   }, [selectedClassId, selectedDate, viewMode]);
+
+  // Reset quick progress when class/date changes
+  useEffect(() => {
+    setCurrentIndex(0);
+  }, [selectedClassId, selectedDate]);
+
+  // Keep currentIndex in bounds when students list updates
+  useEffect(() => {
+    setCurrentIndex((i) => {
+      if (students.length === 0) return 0;
+      return Math.min(i, students.length); // allow i === students.length (completed state)
+    });
+  }, [students.length]);
 
   // Load "classes" based on teaching assignments (subject + batch) for this teacher
   const fetchClasses = async () => {
@@ -118,6 +135,8 @@ export default function AttendanceManager({ teacherId }) {
           attendanceMap[r.student_id] = r.status;
         });
         setAttendance(attendanceMap);
+      } else {
+        setAttendance({});
       }
     } catch (error) {
       console.error("Error fetching daily data:", error);
@@ -185,18 +204,19 @@ export default function AttendanceManager({ teacherId }) {
     }
   };
 
-  const toggleStatus = (studentId, currentStatus) => {
-    const nextStatus = {
-      present: "absent",
-      absent: "late", // use 'late' in DB but treat as "On Leave" in UI
-      late: "present",
-      undefined: "present",
-    }[currentStatus] || "present";
-
-    setAttendance((prev) => ({ ...prev, [studentId]: nextStatus }));
+  const setStudentStatus = (studentId, status) => {
+    setAttendance((prev) => ({ ...prev, [studentId]: status }));
   };
 
+  const getEffectiveStatus = useCallback(
+    (studentId) => attendance[studentId] || "present",
+    [attendance],
+  );
+
   const handleSave = async () => {
+    // Prevent double-click / spam clicking
+    if (loading) return;
+    
     setLoading(true);
     try {
       const cls = classes.find((c) => c.id === selectedClassId);
@@ -231,6 +251,84 @@ export default function AttendanceManager({ teacherId }) {
     }
   };
 
+  const quickTotal = students.length;
+  const quickCompleted = quickTotal > 0 && currentIndex >= quickTotal;
+  const currentStudent = !quickCompleted ? students[currentIndex] : null;
+  const progress = useMemo(() => {
+    if (quickTotal === 0) return 0;
+    const done = Math.min(currentIndex, quickTotal);
+    return Math.round((done / quickTotal) * 100);
+  }, [currentIndex, quickTotal]);
+
+  const goPrev = useCallback(() => {
+    if (quickTotal === 0) return;
+    setCurrentIndex((i) => {
+      if (i >= quickTotal) return Math.max(0, quickTotal - 1);
+      return Math.max(0, i - 1);
+    });
+  }, [quickTotal]);
+
+  const goNext = useCallback(() => {
+    if (quickTotal === 0) return;
+    setCurrentIndex((i) => {
+      if (i >= quickTotal) return i;
+      if (i < quickTotal - 1) return i + 1;
+      return quickTotal; // completed state
+    });
+  }, [quickTotal]);
+
+  const markAndAdvance = useCallback(
+    (status) => {
+      if (!currentStudent) return;
+      setStudentStatus(currentStudent.id, status);
+      setCurrentIndex((i) => {
+        if (quickTotal === 0) return 0;
+        if (i < quickTotal - 1) return i + 1;
+        return quickTotal; // completed
+      });
+    },
+    [currentStudent, quickTotal],
+  );
+
+  // Bonus: keyboard shortcuts in quick mode
+  useEffect(() => {
+    if (viewMode !== "quick") return;
+    if (!selectedClassId) return;
+    if (quickTotal === 0) return;
+
+    const handler = (e) => {
+      const tag = e.target?.tagName?.toLowerCase?.();
+      if (tag === "input" || tag === "textarea" || tag === "select") return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+
+      if (e.key === "ArrowLeft") {
+        e.preventDefault();
+        goPrev();
+        return;
+      }
+      if (e.key === "ArrowRight") {
+        e.preventDefault();
+        goNext();
+        return;
+      }
+
+      const k = e.key?.toLowerCase?.();
+      if (k === "p") {
+        e.preventDefault();
+        markAndAdvance("present");
+      } else if (k === "a") {
+        e.preventDefault();
+        markAndAdvance("absent");
+      } else if (k === "l") {
+        e.preventDefault();
+        markAndAdvance("late");
+      }
+    };
+
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [viewMode, selectedClassId, quickTotal, goPrev, goNext, markAndAdvance]);
+
   return (
     <div className="space-y-6">
       <Card className="border-t-4 border-t-purple-600 shadow-sm">
@@ -247,6 +345,13 @@ export default function AttendanceManager({ teacherId }) {
                     size="sm"
                 >
                     <Calendar className="w-4 h-4 mr-2" /> Daily
+                </Button>
+                <Button 
+                    variant={viewMode === "quick" ? "secondary" : "ghost"}
+                    onClick={() => setViewMode("quick")}
+                    size="sm"
+                >
+                    <Users className="w-4 h-4 mr-2" /> Quick
                 </Button>
                 <Button 
                     variant={viewMode === "history" ? "secondary" : "ghost"}
@@ -278,7 +383,7 @@ export default function AttendanceManager({ teacherId }) {
                 ))}
               </select>
             </div>
-            {viewMode === "daily" && (
+            {viewMode !== "history" && (
                 <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Select Date</label>
                 <input
@@ -294,20 +399,39 @@ export default function AttendanceManager({ teacherId }) {
           {/* Daily View */}
           {viewMode === "daily" && selectedClassId && (
             <div className="space-y-4">
-                 <div className="flex justify-between items-center mb-2">
+                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-2">
                     <p className="text-sm text-gray-500">
-                        Click on status to toggle:{" "}
-                        <span className="text-green-600 font-bold">Present</span>{" "}
-                        → <span className="text-red-500 font-bold">Absent</span>{" "}
-                        →{" "}
-                        <span className="text-yellow-500 font-bold">
-                          On Leave
-                        </span>
+                        Click a status button to mark each student:{" "}
+                        <span className="text-green-600 font-bold">Present</span>,{" "}
+                        <span className="text-red-500 font-bold">Absent</span>, or{" "}
+                        <span className="text-yellow-500 font-bold">Leave</span>
                     </p>
-                    <Button onClick={handleSave} disabled={loading || students.length === 0} className="bg-purple-600 hover:bg-purple-700 text-white">
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          const allPresent = {};
+                          students.forEach((s) => {
+                            allPresent[s.id] = "present";
+                          });
+                          setAttendance(allPresent);
+                        }}
+                        disabled={students.length === 0}
+                        className="border-green-300 text-green-700 hover:bg-green-50"
+                      >
+                        <Users className="w-4 h-4 mr-2" />
+                        Mark All Present
+                      </Button>
+                      <Button 
+                        onClick={handleSave} 
+                        disabled={loading || students.length === 0} 
+                        className="bg-purple-600 hover:bg-purple-700 text-white"
+                      >
                         <Save className="w-4 h-4 mr-2" />
                         {loading ? "Saving..." : "Save Daily Attendance"}
-                    </Button>
+                      </Button>
+                    </div>
                 </div>
 
                 <div className="border rounded-lg overflow-hidden">
@@ -326,18 +450,45 @@ export default function AttendanceManager({ teacherId }) {
                                     <tr key={student.id} className="hover:bg-gray-50 transition-colors">
                                         <td className="px-4 py-3 font-medium text-gray-600">{student.roll}</td>
                                         <td className="px-4 py-3 text-gray-900">{student.full_name}</td>
-                                        <td className="px-4 py-3 text-center">
-                                            <button
-                                                onClick={() => toggleStatus(student.id, status)}
-                                                className={`
-                                                    px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wide w-24 transition-all
-                                                    ${status === 'present' ? 'bg-green-100 text-green-700 hover:bg-green-200' : ''}
-                                                    ${status === 'absent' ? 'bg-red-100 text-red-700 hover:bg-red-200' : ''}
-                                                    ${status === "late" ? "bg-yellow-100 text-yellow-700 hover:bg-yellow-200" : ""}
-                                                `}
-                                            >
-                                                {status === "late" ? "on leave" : status}
-                                            </button>
+                                        <td className="px-4 py-3">
+                                            <div className="flex gap-2 justify-center items-center">
+                                                <button
+                                                    onClick={() => setStudentStatus(student.id, "present")}
+                                                    className={`
+                                                        px-3 py-1.5 rounded-md text-xs font-bold uppercase tracking-wide transition-all min-w-[70px]
+                                                        ${status === 'present' 
+                                                            ? 'bg-green-600 text-white shadow-md' 
+                                                            : 'bg-green-50 text-green-700 hover:bg-green-100 border border-green-200'
+                                                        }
+                                                    `}
+                                                >
+                                                    Present
+                                                </button>
+                                                <button
+                                                    onClick={() => setStudentStatus(student.id, "absent")}
+                                                    className={`
+                                                        px-3 py-1.5 rounded-md text-xs font-bold uppercase tracking-wide transition-all min-w-[70px]
+                                                        ${status === 'absent' 
+                                                            ? 'bg-red-600 text-white shadow-md' 
+                                                            : 'bg-red-50 text-red-700 hover:bg-red-100 border border-red-200'
+                                                        }
+                                                    `}
+                                                >
+                                                    Absent
+                                                </button>
+                                                <button
+                                                    onClick={() => setStudentStatus(student.id, "late")}
+                                                    className={`
+                                                        px-3 py-1.5 rounded-md text-xs font-bold uppercase tracking-wide transition-all min-w-[70px]
+                                                        ${status === 'late' 
+                                                            ? 'bg-yellow-600 text-white shadow-md' 
+                                                            : 'bg-yellow-50 text-yellow-700 hover:bg-yellow-100 border border-yellow-200'
+                                                        }
+                                                    `}
+                                                >
+                                                    Leave
+                                                </button>
+                                            </div>
                                         </td>
                                     </tr>
                                 );
@@ -352,6 +503,229 @@ export default function AttendanceManager({ teacherId }) {
                         </tbody>
                     </table>
                 </div>
+            </div>
+          )}
+
+          {/* Quick Mode */}
+          {viewMode === "quick" && selectedClassId && (
+            <div className="space-y-4">
+              {students.length === 0 ? (
+                <div className="flex flex-col items-center justify-center p-12 text-gray-400 border-2 border-dashed rounded-lg">
+                  <Users className="w-12 h-12 mb-2 opacity-50" />
+                  <p>No students found in this class.</p>
+                </div>
+              ) : (
+                <>
+                  {/* Progress */}
+                  <div className="bg-white border rounded-lg p-4">
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                      <div className="text-sm text-gray-700 font-medium">
+                        {quickCompleted ? (
+                          "Attendance Completed"
+                        ) : (
+                          <>
+                            Student{" "}
+                            <span className="font-bold text-purple-700">
+                              {currentIndex + 1}
+                            </span>{" "}
+                            of{" "}
+                            <span className="font-bold">{quickTotal}</span>
+                          </>
+                        )}
+                      </div>
+                      <div className="text-xs text-gray-500">
+                        Shortcuts: <span className="font-medium">P</span>{" "}
+                        Present, <span className="font-medium">A</span> Absent,{" "}
+                        <span className="font-medium">L</span> Leave,{" "}
+                        <span className="font-medium">←</span> Prev,{" "}
+                        <span className="font-medium">→</span> Next
+                      </div>
+                    </div>
+                    <div className="mt-3 h-2 w-full bg-gray-100 rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-purple-600 transition-all duration-300"
+                        style={{ width: `${progress}%` }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Marking UI */}
+                  {!quickCompleted && currentStudent && (
+                    <div className="bg-gradient-to-br from-purple-50 to-white border rounded-xl p-6 shadow-sm">
+                      <div className="flex items-start justify-between gap-4">
+                        <div>
+                          <div className="text-xs font-semibold text-purple-700 uppercase tracking-wide">
+                            Roll No
+                          </div>
+                          <div className="text-3xl font-bold text-gray-900 mt-1">
+                            {currentStudent.roll || "-"}
+                          </div>
+                          <div className="text-sm text-gray-500 mt-2">
+                            {currentStudent.full_name}
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <div className="text-xs text-gray-500">Current</div>
+                          <div className="mt-1 inline-flex items-center px-3 py-1 rounded-full text-xs font-bold bg-gray-100 text-gray-700">
+                            {getEffectiveStatus(currentStudent.id) === "late"
+                              ? "leave"
+                              : getEffectiveStatus(currentStudent.id)}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="mt-6 grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <button
+                          type="button"
+                          onClick={() => markAndAdvance("present")}
+                          className="w-full rounded-xl px-4 py-4 font-bold text-white bg-green-600 hover:bg-green-700 transition flex items-center justify-center gap-2"
+                        >
+                          <CheckCircle className="w-5 h-5" /> Present
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => markAndAdvance("absent")}
+                          className="w-full rounded-xl px-4 py-4 font-bold text-white bg-red-600 hover:bg-red-700 transition flex items-center justify-center gap-2"
+                        >
+                          <XCircle className="w-5 h-5" /> Absent
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => markAndAdvance("late")}
+                          className="w-full rounded-xl px-4 py-4 font-bold text-white bg-yellow-600 hover:bg-yellow-700 transition flex items-center justify-center gap-2"
+                        >
+                          <Clock className="w-5 h-5" /> Leave
+                        </button>
+                      </div>
+
+                      <div className="mt-5 flex items-center justify-between">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={goPrev}
+                          disabled={currentIndex === 0}
+                        >
+                          <ChevronLeft className="w-4 h-4 mr-1" />
+                          Previous
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={goNext}
+                        >
+                          Skip
+                          <ChevronRight className="w-4 h-4 ml-1" />
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Review + Save */}
+                  {quickCompleted && (
+                    <div className="space-y-4">
+                      <div className="bg-green-50 border border-green-100 rounded-lg p-4 flex items-start gap-3">
+                        <CheckCircle className="w-5 h-5 text-green-700 mt-0.5" />
+                        <div>
+                          <div className="font-semibold text-green-800">
+                            Attendance Completed
+                          </div>
+                          <div className="text-sm text-green-700">
+                            Review and edit before saving to the database.
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="border rounded-lg overflow-hidden bg-white">
+                        <table className="w-full text-sm">
+                          <thead className="bg-gray-50">
+                            <tr>
+                              <th className="px-4 py-3 text-left">Roll</th>
+                              <th className="px-4 py-3 text-left">Student</th>
+                              <th className="px-4 py-3 text-center">Status</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y">
+                            {students.map((s) => {
+                              const st = getEffectiveStatus(s.id);
+                              return (
+                                <tr key={s.id} className="hover:bg-gray-50">
+                                  <td className="px-4 py-3 font-medium text-gray-600">
+                                    {s.roll || "-"}
+                                  </td>
+                                  <td className="px-4 py-3 text-gray-900">
+                                    {s.full_name}
+                                  </td>
+                                  <td className="px-4 py-3">
+                                    <div className="flex gap-2 justify-center items-center">
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          setStudentStatus(s.id, "present")
+                                        }
+                                        className={`px-3 py-1.5 rounded-md text-xs font-bold uppercase tracking-wide transition-all min-w-[70px] ${
+                                          st === "present"
+                                            ? "bg-green-600 text-white shadow-md"
+                                            : "bg-green-50 text-green-700 hover:bg-green-100 border border-green-200"
+                                        }`}
+                                      >
+                                        Present
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          setStudentStatus(s.id, "absent")
+                                        }
+                                        className={`px-3 py-1.5 rounded-md text-xs font-bold uppercase tracking-wide transition-all min-w-[70px] ${
+                                          st === "absent"
+                                            ? "bg-red-600 text-white shadow-md"
+                                            : "bg-red-50 text-red-700 hover:bg-red-100 border border-red-200"
+                                        }`}
+                                      >
+                                        Absent
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          setStudentStatus(s.id, "late")
+                                        }
+                                        className={`px-3 py-1.5 rounded-md text-xs font-bold uppercase tracking-wide transition-all min-w-[70px] ${
+                                          st === "late"
+                                            ? "bg-yellow-600 text-white shadow-md"
+                                            : "bg-yellow-50 text-yellow-700 hover:bg-yellow-100 border border-yellow-200"
+                                        }`}
+                                      >
+                                        Leave
+                                      </button>
+                                    </div>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+
+                      <div className="flex flex-col sm:flex-row gap-2 justify-end">
+                        <Button
+                          variant="outline"
+                          onClick={() => setCurrentIndex(Math.max(0, quickTotal - 1))}
+                        >
+                          <ChevronLeft className="w-4 h-4 mr-2" />
+                          Back
+                        </Button>
+                        <Button
+                          onClick={handleSave}
+                          disabled={loading || students.length === 0}
+                          className="bg-purple-600 hover:bg-purple-700 text-white"
+                        >
+                          <Save className="w-4 h-4 mr-2" />
+                          {loading ? "Saving..." : "Save All Attendance"}
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
             </div>
           )}
 
