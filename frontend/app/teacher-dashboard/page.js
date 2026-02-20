@@ -3,6 +3,7 @@ import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useSidebar } from "@/hooks/useSidebar";
 import { Button } from "@/components/ui/button";
+import { useToast } from "@/components/ui/Toast";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { supabase } from "@/lib/supabaseClient";
 import NotificationBell from "@/components/ui/notificationBell";
@@ -31,6 +32,7 @@ import AssignmentsManager from "@/components/dashboard/AssignmentsManager";
 
 export default function TeacherDashboardPage() {
   const router = useRouter();
+  const toast = useToast();
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState(null);
   const [profile, setProfile] = useState(null);
@@ -450,9 +452,7 @@ export default function TeacherDashboardPage() {
                 user={user}
                 profile={profile}
                 teacherRecord={teacherRecord}
-                onChangePassword={() =>
-                  alert("Password change handled in profile settings.")
-                }
+                onChangePassword={() => toast.info("Password change is available in profile settings.")}
               />
             )}
           </div>

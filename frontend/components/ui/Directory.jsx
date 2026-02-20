@@ -187,7 +187,7 @@ export default function Directory({ type = "teacher", title, description }) {
               </h2>
               {!isTeacher && (
                 <Button
-                  onClick={() => alert("Add student feature - coming soon!")}
+                  onClick={() => toast.info("Add student feature - coming soon!")}
                   className="bg-blue-600 hover:bg-blue-700 text-white"
                 >
                   + Add Student
@@ -327,14 +327,14 @@ export default function Directory({ type = "teacher", title, description }) {
                               <Button
                                 variant="ghost"
                                 size="sm"
-                                onClick={() => alert(`Edit ${item.full_name}`)}
+                                onClick={() => toast.info(`Edit ${item.full_name} - coming soon`)}
                               >
                                 Edit
                               </Button>
                               <Button
                                 variant="ghost"
                                 size="sm"
-                                onClick={() => handleDelete(item.id)}
+                                onClick={() => handleDeleteClick(item.id)}
                                 className="text-red-600 hover:text-red-700"
                               >
                                 Delete
@@ -351,6 +351,17 @@ export default function Directory({ type = "teacher", title, description }) {
           </div>
         </div>
       </div>
+
+      <ConfirmDialog
+        open={deleteConfirm.open}
+        onClose={() => setDeleteConfirm({ open: false, id: null })}
+        onConfirm={handleDeleteConfirm}
+        title={`Delete ${type.charAt(0).toUpperCase() + type.slice(1)}`}
+        message={`Are you sure? This will delete from all tables.`}
+        confirmText="Delete"
+        cancelText="Cancel"
+        variant="danger"
+      />
     </ProtectedRoute>
   );
 }

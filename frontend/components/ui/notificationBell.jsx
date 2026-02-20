@@ -1,11 +1,13 @@
 "use client";
 import React, { useState, useEffect, useRef } from "react";
+import { useToast } from "@/components/ui/Toast";
 import { Bell, Send, X, Clock } from "lucide-react";
 import { supabase } from "../../lib/supabaseClient";
 import NotificationPanel from "./notificationPanel";
 import { Button } from "./button";
 
 export default function NotificationBell({ userRole, userId }) {
+  const toast = useToast();
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showDropdown, setShowDropdown] = useState(false);
@@ -130,7 +132,7 @@ useEffect(() => {
       const token = session?.access_token;
 
       if (!token) {
-        alert("Please sign in again to delete notifications.");
+        toast.error("Please sign in again to delete notifications.");
         return;
       }
 
@@ -144,7 +146,7 @@ useEffect(() => {
       const result = await res.json();
 
       if (!res.ok) {
-        alert(result.error || "Failed to delete notification");
+        toast.error(result.error || "Failed to delete notification");
         return;
       }
 
@@ -154,7 +156,7 @@ useEffect(() => {
       setUnreadCount((prev) => Math.max(0, prev - 1));
     } catch (error) {
       console.error("Error deleting notification:", error);
-      alert("Failed to delete notification");
+      toast.error("Failed to delete notification");
     }
   };
 

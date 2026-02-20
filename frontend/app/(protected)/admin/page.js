@@ -3,6 +3,8 @@ import React, { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import Sidebar from "@/components/ui/Sidebar";
+import ConfirmDialog from "@/components/ui/ConfirmDialog";
+import { useToast } from "@/components/ui/Toast";
 import {
   LayoutDashboard,
   Users,
@@ -40,6 +42,8 @@ import AdminNoticesManager from "@/components/dashboard/AdminNoticesManager";
 
 export default function AdminPage() {
   const router = useRouter();
+  const toast = useToast();
+  const [deleteUserConfirm, setDeleteUserConfirm] = useState({ open: false, id: null, role: null, name: "" });
   const [loading, setLoading] = useState(true);
   const [userRole, setUserRole] = useState(null);
   const [userId, setUserId] = useState(null);
@@ -284,18 +288,24 @@ export default function AdminPage() {
     setShowAddUser(true);
   };
 
-  const handleDeleteUser = async (id, role) => {
-    if (!confirm("Are you sure?")) return;
+  const handleDeleteUserClick = (id, role, name) => {
+    setDeleteUserConfirm({ open: true, id, role, name: name || "this user" });
+  };
+
+  const handleDeleteUserConfirm = async () => {
+    const { id, role } = deleteUserConfirm;
+    setDeleteUserConfirm({ open: false, id: null, role: null, name: "" });
+    if (!id || !role) return;
     try {
-      // Use existing API or direct Supabase if policy allows
       await fetch("/api/delete-user", {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id, role }),
       });
-      fetchAllData(); // Refresh
+      fetchAllData();
+      toast.success("User deleted successfully.");
     } catch (error) {
-      alert("Error deleting user");
+      toast.error("Error deleting user");
     }
   };
 
@@ -610,8 +620,7 @@ export default function AdminPage() {
                             className="h-8 w-8 p-0 text-purple-600 hover:bg-purple-50"
                             title="Assign to Batch"
                             onClick={() => {
-                              // TODO: Open batch assignment modal
-                              alert(`Assign ${s.full_name} to a batch`);
+                              toast.info(`Assign ${s.full_name} to a batch - use batch management`);
                             }}
                           >
                             <BookOpen className="w-4 h-4" />
@@ -621,11 +630,7 @@ export default function AdminPage() {
                             size="sm"
                             className="h-8 w-8 p-0 text-red-600 hover:bg-red-50"
                             title="Delete Student"
-                            onClick={() => {
-                              if (confirm(`Are you sure you want to delete ${s.full_name}?`)) {
-                                handleDeleteUser(s.id, "student");
-                              }
-                            }}
+                            onClick={() => handleDeleteUserClick(s.id, "student", s.full_name)}
                           >
                             <Trash2 className="w-4 h-4" />
                           </Button>
@@ -718,7 +723,7 @@ export default function AdminPage() {
                           variant="ghost"
                           size="sm"
                           className="h-8 w-8 p-0 text-red-600"
-                          onClick={() => handleDeleteUser(t.id, "teacher")}
+                          onClick={() => handleDeleteUserClick(t.id, "teacher", t.full_name)}
                         >
                           <Trash2 className="w-4 h-4" />
                         </Button>
@@ -1565,6 +1570,17 @@ export default function AdminPage() {
         onClose={() => setShowAddUser(false)}
         onUserAdded={fetchAllData}
         userType={addUserRole}
+      />
+
+      <ConfirmDialog
+        open={deleteUserConfirm.open}
+        onClose={() => setDeleteUserConfirm({ open: false, id: null, role: null, name: "" })}
+        onConfirm={handleDeleteUserConfirm}
+        title="Delete User"
+        message={`Are you sure you want to delete ${deleteUserConfirm.name}? This cannot be undone.`}
+        confirmText="Delete"
+        cancelText="Cancel"
+        variant="danger"
       />
     </div>
   );

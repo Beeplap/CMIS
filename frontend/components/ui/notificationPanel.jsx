@@ -1,5 +1,6 @@
 "use client";
 import React, { useState } from "react";
+import { useToast } from "@/components/ui/Toast";
 import { Button } from "./button";
 import {
   Card,
@@ -13,6 +14,7 @@ import { Fragment } from "react";
 import { supabase } from "../../lib/supabaseClient";
 
 export default function NotificationPanel({ open, onClose, onNotificationSent }) {
+  const toast = useToast();
   const [title, setTitle] = useState("");
   const [message, setMessage] = useState("");
   const [recipientRole, setRecipientRole] = useState("teacher");
@@ -82,7 +84,7 @@ export default function NotificationPanel({ open, onClose, onNotificationSent })
       }
       
       onClose();
-      alert("Notification sent successfully!");
+      toast.success("Notification sent successfully!");
     } catch (err) {
       console.error("Error sending notification:", err);
       setError(err.message || "Failed to send notification");
