@@ -1,8 +1,32 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { Check, X } from "lucide-react";
+
+// Password validation rules
+const PASSWORD_RULES = [
+  {
+    id: "length",
+    label: "At least 8 characters",
+    test: (p) => p.length >= 8,
+  },
+  {
+    id: "uppercase",
+    label: "At least one uppercase letter",
+    test: (p) => /[A-Z]/.test(p),
+  },
+  {
+    id: "special",
+    label: "At least one special character (!@#$%^&* etc.)",
+    test: (p) => /[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?`~]/.test(p),
+  },
+];
+
+function validatePassword(password) {
+  return PASSWORD_RULES.every((rule) => rule.test(password));
+}
 
 export default function SignupPage() {
   const router = useRouter();
@@ -17,6 +41,20 @@ export default function SignupPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [showPasswordRules, setShowPasswordRules] = useState(false);
+
+  const passwordChecks = useMemo(
+    () =>
+      PASSWORD_RULES.map((rule) => ({
+        ...rule,
+        pass: rule.test(formData.password),
+      })),
+    [formData.password],
+  );
+  const isPasswordValid = useMemo(
+    () => validatePassword(formData.password),
+    [formData.password],
+  );
 
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.id]: e.target.value });
@@ -24,6 +62,12 @@ export default function SignupPage() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (!isPasswordValid) {
+      setError(
+        "Password must be at least 8 characters, include one uppercase letter, and one special character.",
+      );
+      return;
+    }
     setLoading(true);
     setError("");
     setSuccess("");
@@ -187,9 +231,45 @@ export default function SignupPage() {
                   required
                   value={formData.password}
                   onChange={handleChange}
-                  className="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-purple-500 outline-none transition-all"
-                  placeholder="Min 6 characters"
+                  onFocus={() => setShowPasswordRules(true)}
+                  onBlur={() => setShowPasswordRules(formData.password.length > 0)}
+                  className={`w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-purple-500 outline-none transition-all ${
+                    formData.password && !isPasswordValid
+                      ? "border-amber-400"
+                      : formData.password && isPasswordValid
+                        ? "border-green-500"
+                        : ""
+                  }`}
+                  placeholder="Min 8 chars, 1 uppercase, 1 special (!@#$%)"
+                  minLength={8}
+                  autoComplete="new-password"
                 />
+                {(showPasswordRules || formData.password) && (
+                  <div className="mt-2 p-3 bg-gray-50 dark:bg-gray-800/50 rounded-md border border-gray-200 dark:border-gray-700">
+                    <p className="text-xs font-medium text-gray-600 dark:text-gray-400 mb-2">
+                      Password requirements:
+                    </p>
+                    <ul className="space-y-1.5">
+                      {passwordChecks.map(({ id, label, pass }) => (
+                        <li
+                          key={id}
+                          className={`flex items-center gap-2 text-sm ${
+                            pass
+                              ? "text-green-600 dark:text-green-500"
+                              : "text-gray-500 dark:text-gray-400"
+                          }`}
+                        >
+                          {pass ? (
+                            <Check className="w-4 h-4 shrink-0" />
+                          ) : (
+                            <X className="w-4 h-4 shrink-0 opacity-50" />
+                          )}
+                          <span>{label}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -208,7 +288,7 @@ export default function SignupPage() {
 
           <button
             type="submit"
-            disabled={loading}
+            disabled={loading || !isPasswordValid}
             className="w-full bg-purple-600 text-white py-3 rounded-md hover:bg-purple-700 transition-colors disabled:opacity-50 font-medium shadow-md"
           >
             {loading ? "Verifying & Registering..." : "Create Account"}

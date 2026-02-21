@@ -23,6 +23,26 @@ export async function POST(req) {
       );
     }
 
+    // Password validation: min 8 chars, 1 uppercase, 1 special character
+    if (password.length < 8) {
+      return NextResponse.json(
+        { error: "Password must be at least 8 characters long." },
+        { status: 400 },
+      );
+    }
+    if (!/[A-Z]/.test(password)) {
+      return NextResponse.json(
+        { error: "Password must contain at least one uppercase letter." },
+        { status: 400 },
+      );
+    }
+    if (!/[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?`~]/.test(password)) {
+      return NextResponse.json(
+        { error: "Password must contain at least one special character (!@#$%^&* etc.)." },
+        { status: 400 },
+      );
+    }
+
     const fullName = `${firstName} ${lastName}`.trim();
 
     // Setup Admin Client
