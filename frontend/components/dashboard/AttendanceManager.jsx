@@ -244,6 +244,12 @@ export default function AttendanceManager({ teacherId }) {
   const handleSave = async () => {
     // Prevent double-click / spam clicking
     if (loading || !selectedClassId || students.length === 0) return;
+
+    const today = new Date().toISOString().split("T")[0];
+    if (selectedDate > today) {
+      toast.error("Cannot take attendance for a future date.");
+      return;
+    }
     
     setLoading(true);
     try {
@@ -426,7 +432,12 @@ export default function AttendanceManager({ teacherId }) {
                     type="date"
                     className="w-full p-2 border rounded-md"
                     value={selectedDate}
-                    onChange={(e) => setSelectedDate(e.target.value)}
+                    max={new Date().toISOString().split("T")[0]}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      const today = new Date().toISOString().split("T")[0];
+                      setSelectedDate(val <= today ? val : today);
+                    }}
                 />
                 </div>
             )}
