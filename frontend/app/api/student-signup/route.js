@@ -9,7 +9,6 @@ export async function POST(req) {
     const { firstName, lastName, email, password, registrationNumber, dob } =
       body;
 
-    // 1. Basic Validation
     if (
       !firstName ||
       !lastName ||
@@ -26,7 +25,7 @@ export async function POST(req) {
 
     const fullName = `${firstName} ${lastName}`.trim();
 
-    // 2. Setup Admin Client
+    // Setup Admin Client
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
@@ -67,17 +66,13 @@ export async function POST(req) {
       );
     }
 
-    // 4. Verify Name and DOB
-    // normalize strings for comparison
+   
     const dbName = invitation.full_name.toLowerCase().trim();
     const inputName = fullName.toLowerCase().trim();
 
-    // Simple check: input name should match db name (fuzzy or strict?)
-    // Strict for now as per prompt "if first name and registration number matches"
-    // actually user said "first name", but sticking to full name is safer for "Aakash xxx" vs "Aakash yyy"
+   
     if (dbName !== inputName) {
-      // Fallback: check if DB name *starts with* first name (if db is "Aakash Chaudhary" and input is "Aakash")
-      // validation: "if first name ... matches"
+     
       const dbFirstName = dbName.split(" ")[0];
       const inputFirstName = firstName.toLowerCase().trim();
 
@@ -89,10 +84,7 @@ export async function POST(req) {
       }
     }
 
-    // Check DOB - Validation Removed as per user request (Step 95)
-    // We trust the student's input DOB and will save it to their profile instead of matching it.
-
-    // 5. Create Auth User
+ 
     const { data: authData, error: authError } =
       await supabase.auth.admin.createUser({
         email,
@@ -117,7 +109,6 @@ export async function POST(req) {
     });
 
     if (userTableError) {
-      // rollback auth
       await supabase.auth.admin.deleteUser(userId);
       return NextResponse.json(
         { error: "Failed to create user profile." },
@@ -125,11 +116,10 @@ export async function POST(req) {
       );
     }
 
-    // 7. Insert into Students Table
     const { error: studentError } = await supabase.from("students").insert({
       id: userId,
-      reg_no: registrationNumber, // Store the official Registration Number here
-      roll: null, // Roll number will be assigned when added to a batch
+      reg_no: registrationNumber, 
+      roll: null, 
       full_name: fullName,
       dob: dob,
     });
@@ -137,7 +127,6 @@ export async function POST(req) {
     if (studentError) {
       console.error("Student insert error", studentError);
 
-      // Rollback: Delete from public.users and auth.users
       await supabase.from("users").delete().eq("id", userId);
       await supabase.auth.admin.deleteUser(userId);
 
@@ -151,7 +140,6 @@ export async function POST(req) {
       );
     }
 
-    // 8. Assign new student to default 5th semester batch (if available)
     try {
       const { data: defaultBatch, error: batchError } = await supabase
         .from("batches")
@@ -177,7 +165,6 @@ export async function POST(req) {
             updateStudentError,
           );
         } else {
-          // Recalculate rolls for that batch, best-effort (don't fail signup)
           try {
             const { recalculateBatchRolls } = await import(
               "@/lib/rollGenerator"

@@ -13,7 +13,6 @@ import {
   TrendingUp,
 } from "lucide-react";
 
-// Components
 import StudentAttendanceView from "@/components/dashboard/StudentAttendanceView";
 import StudentAssignmentsView from "@/components/dashboard/StudentAssignmentsView";
 import StudentMarksView from "@/components/dashboard/StudentMarksView";
