@@ -23,6 +23,41 @@ export async function POST(req) {
       );
     }
 
+    // Email validation - reject invalid formats (123@123.com, etc.)
+    const trimmedEmail = String(email).trim().toLowerCase();
+    const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+    if (
+      trimmedEmail.length < 6 ||
+      trimmedEmail.length > 254 ||
+      !emailRegex.test(trimmedEmail)
+    ) {
+      return NextResponse.json(
+        { error: "Please enter a valid email address." },
+        { status: 400 },
+      );
+    }
+    const [localPart, domainPart] = trimmedEmail.split("@");
+    if (!/[a-zA-Z]/.test(localPart)) {
+      return NextResponse.json(
+        { error: "Invalid email format. The email address is not valid." },
+        { status: 400 },
+      );
+    }
+    const domainSegments = domainPart.split(".");
+    const domainName = domainSegments.slice(0, -1).join(".");
+    const tld = domainSegments[domainSegments.length - 1];
+    if (
+      !domainName ||
+      !/[a-zA-Z]/.test(domainName) ||
+      !tld ||
+      !/^[a-zA-Z]{2,6}$/.test(tld)
+    ) {
+      return NextResponse.json(
+        { error: "Invalid email format. Please use a real email address." },
+        { status: 400 },
+      );
+    }
+
     // Password validation: min 8 chars, 1 uppercase, 1 special character
     if (password.length < 8) {
       return NextResponse.json(
@@ -107,7 +142,7 @@ export async function POST(req) {
  
     const { data: authData, error: authError } =
       await supabase.auth.admin.createUser({
-        email,
+        email: trimmedEmail,
         password,
         email_confirm: true,
         user_metadata: { full_name: fullName, role: "student" },
@@ -122,7 +157,7 @@ export async function POST(req) {
     // 6. Insert into Users Table
     const { error: userTableError } = await supabase.from("users").insert({
       id: userId,
-      email,
+      email: trimmedEmail,
       role: "student",
       full_name: fullName,
       is_active: true,

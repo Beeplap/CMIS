@@ -28,6 +28,22 @@ function validatePassword(password) {
   return PASSWORD_RULES.every((rule) => rule.test(password));
 }
 
+function validateEmail(email) {
+  if (!email || typeof email !== "string") return false;
+  const trimmed = email.trim().toLowerCase();
+  if (trimmed.length < 6 || trimmed.length > 254) return false;
+  const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+  if (!emailRegex.test(trimmed)) return false;
+  const [local, domain] = trimmed.split("@");
+  if (!/[a-zA-Z]/.test(local)) return false;
+  const domainParts = domain.split(".");
+  const domainName = domainParts.slice(0, -1).join(".");
+  if (!domainName || !/[a-zA-Z]/.test(domainName)) return false;
+  const tld = domainParts[domainParts.length - 1];
+  if (!tld || !/^[a-zA-Z]{2,6}$/.test(tld)) return false;
+  return true;
+}
+
 export default function SignupPage() {
   const router = useRouter();
   const [formData, setFormData] = useState({
@@ -55,6 +71,10 @@ export default function SignupPage() {
     () => validatePassword(formData.password),
     [formData.password],
   );
+  const isEmailValid = useMemo(
+    () => validateEmail(formData.email),
+    [formData.email],
+  );
 
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.id]: e.target.value });
@@ -62,6 +82,12 @@ export default function SignupPage() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (!isEmailValid) {
+      setError(
+        "Please enter a valid email address (e.g. name@university.edu or name@gmail.com). Invalid formats like 123@123.com are not accepted.",
+      );
+      return;
+    }
     if (!isPasswordValid) {
       setError(
         "Password must be at least 8 characters, include one uppercase letter, and one special character.",
@@ -214,9 +240,22 @@ export default function SignupPage() {
                   required
                   value={formData.email}
                   onChange={handleChange}
-                  className="w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-purple-500 outline-none transition-all"
-                  placeholder="you@example.com"
+                  className={`w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-purple-500 outline-none transition-all ${
+                    formData.email && !isEmailValid
+                      ? "border-amber-400"
+                      : formData.email && isEmailValid
+                        ? "border-green-500"
+                        : ""
+                  }`}
+                  placeholder="you@gmail.com"
+                  autoComplete="email"
                 />
+                {formData.email && !isEmailValid && (
+                  <p className="mt-1 text-xs text-amber-600">
+                    Use a valid email (e.g. name@university.edu). Formats like
+                    123@123.com are invalid.
+                  </p>
+                )}
               </div>
               <div>
                 <label
@@ -232,7 +271,9 @@ export default function SignupPage() {
                   value={formData.password}
                   onChange={handleChange}
                   onFocus={() => setShowPasswordRules(true)}
-                  onBlur={() => setShowPasswordRules(formData.password.length > 0)}
+                  onBlur={() =>
+                    setShowPasswordRules(formData.password.length > 0)
+                  }
                   className={`w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-purple-500 outline-none transition-all ${
                     formData.password && !isPasswordValid
                       ? "border-amber-400"
@@ -288,7 +329,7 @@ export default function SignupPage() {
 
           <button
             type="submit"
-            disabled={loading || !isPasswordValid}
+            disabled={loading || !isEmailValid || !isPasswordValid}
             className="w-full bg-purple-600 text-white py-3 rounded-md hover:bg-purple-700 transition-colors disabled:opacity-50 font-medium shadow-md"
           >
             {loading ? "Verifying & Registering..." : "Create Account"}
